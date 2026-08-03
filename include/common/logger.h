@@ -164,7 +164,7 @@ inline void logfDebug(const char* func, int line, const char* fmt, ...)
 } // namespace common
 } // namespace vcomponent
 
-// LOGF_* macros (printf-style) used across HDMI Input component.
+// LOGF_* macros (printf-style) used across the Motion Sensor vcomponent.
 #define LOGF_INFO(fmt, ...)  ::vcomponent::common::logf(::vcomponent::common::LogLevel::Info,  fmt, ##__VA_ARGS__)
 #define LOGF_WARN(fmt, ...)  ::vcomponent::common::logf(::vcomponent::common::LogLevel::Warn,  fmt, ##__VA_ARGS__)
 #define LOGF_ERR(fmt, ...)   ::vcomponent::common::logf(::vcomponent::common::LogLevel::Error, fmt, ##__VA_ARGS__)
