@@ -17,6 +17,7 @@
  * limitations under the License.
  */
 
+#include "service/vcomponent_MotionSensorService.h"
 #include "aidl/vcomponent_MotionSensorManager.h"
 
 #include "common/logger.h"

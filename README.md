@@ -1,187 +1,99 @@
-# Motion Sensor vcomponent (stub)
+# rdk-halif-aidl-vcomponent-sensor
 
-This repository contains a **basic stub** for an RDK **Motion Sensor** component wrapper/service that is intended to work with the RDK HALIF motion-sensor AIDL interfaces.
+The Motion Sensor vDevice module provides an emulated Motion Sensor HAL implementation backed by a Binder/AIDL service. The service uses an HFP (HAL Feature Profile) YAML configuration to define the Motion Sensor interface version and sensor capabilities. During startup, the service loads the HFP YAML, starts a UT ControlPlane endpoint for receiving YAML/KVP control messages, publishes the Binder service under the AIDL-defined Motion Sensor service name, and then joins the Binder thread pool.
 
-The current codebase is focused on the motion-sensor domain and includes Binder-facing manager, sensor, controller, listener, helper, and service scaffolding. It is **not yet a hardware-backed implementation**.
+## Table of Contents
 
-## What this repository currently provides
+- [Motion Sensor (vDevice) README](#rdk-halif-aidl-vcomponent-sensor)
+  - [Acronyms, Terms and Abbreviations](#acronyms-terms-and-abbreviations)
+  - [Build RDKMotionSensorService](#build-rdkmotionsensorservice)
+  - [Run Motion Sensor](#run-motion-sensor)
 
-- A Binder service entrypoint for the motion sensor component
-- Stub C++ classes for:
-  - `IMotionSensorManager`
-  - `IMotionSensor`
-  - `IMotionSensorController`
-  - controller/event listener support
-- Build integration for RDK HALIF AIDL and Binder SDK artifacts
-- A sample motion-sensor HFP YAML configuration
-- Utility helpers for configuration parsing and file handling
+## Acronyms, Terms and Abbreviations
 
-## Current implementation status
+| Acronym / Term | Description |
+|----------------|-------------|
+| **AIDL** | Android Interface Definition Language |
+| **HAL** | Hardware Abstraction Layer |
+| **HFP** | HAL Feature Profile (YAML profile used to configure the vComponent) |
+| **RDK** | Reference Design Kit |
+| **UT-Core** | RDK Unified Test Core Framework |
+| **UT ControlPlane** | UT-Core / UT-Control control plane for receiving YAML/KVP control messages |
+| **VTS** | Vendor Test Suite |
+| **YAML** | Yet Another Markup Language (configuration format) |
 
-This repository is presently a **stub-only motion sensor implementation**.
+## Build RDKMotionSensorService
 
-In the current code:
+### Prerequisites for UT-Core
 
-- `MotionSensorManager` initializes in stub-only mode
-- `getMotionSensorIds()` returns an empty list
-- `getMotionSensor()` returns `nullptr`
-- the service starts, validates a YAML path, attempts to read the config file, and then publishes the Binder service threadpool
+This module relies on UT-Core / UT-Control headers and libraries. Please ensure all required packages for UT-Core are installed. See:
+[Packages for ut-core](https://github.com/rdkcentral/ut-core/wiki/UT-Core-Building-using-Docker-or-Vagrant#script-for-installing-basic-packages-for-ut-core)
 
-That means:
+### Clone the Repository
 
-- the project builds the motion-sensor component structure
-- the service can be started
-- the real hardware-backed motion detection behavior is **not implemented yet**
+```bash
+git clone https://github.com/rdkcentral/rdk-halif-aidl-vcomponent-sensor.git
 
-## Authoritative interface reference
+cd rdk-halif-aidl-vcomponent-sensor
+```
 
-The motion-sensor interfaces and documentation are aligned to the RDK HALIF sensor motion model in the bundled `rdk-halif-aidl` workspace.
+### Environment variables
 
-Useful references in this repository:
+The build is driven by `./build.sh` in this repository. It uses (or defaults) the following environment variables:
 
-- `rdk-halif-aidl/sensor/0.1.0.0/docs/motion/motion_sensor.md`
-- `include/aidl/`
-- `src/aidl/`
-- `src/service/vcomponent_MotionSensorService.cpp`
+- `UT_CORE_VERSION`: Specific version of UT-Core to build. If not set, the script checks out the latest tag.
+- `RDK_HALIF_AIDL_VERSION`: Git ref used if the script must clone `rdk-halif-aidl`. The script defaults to `main`.
 
-## Repository layout
+Example:
 
-This repository follows the motion-sensor-oriented layout below:
+```bash
+export UT_CORE_VERSION=5.1.0
+export RDK_HALIF_AIDL_VERSION=0.22.0
+```
 
-- `include/aidl/`  
-  Motion sensor Binder-facing headers and component classes
-- `src/aidl/`  
-  Motion sensor manager/controller/listener implementation stubs
-- `src/service/`  
-  Motion sensor service entrypoint
-- `include/common/`  
-  Logging support
-- `include/utility/` and `src/utility/`  
-  Helper and configuration-parsing utilities
-- `vcomponent_configurations/`  
-  Example HFP YAML for the motion sensor
-- `aidl_lib/Makefile`  
-  Placeholder support for AIDL-related packaging/generation
-- `ut-core/`  
-  Unit-test support dependency used by the build flow
+### Build command (Target Linux)
 
-## Motion sensor configuration
+From the repository root:
 
-The default configuration used by the service is:
-
-- `vcomponent_configurations/hfp-sensor-motion.yaml`
-
-The sample YAML describes motion-sensor-related properties such as:
-
-- sensor identifier
-- sensor name
-- supported sensitivity range
-- deep-sleep autonomy support
-- operational modes
-- default start configuration
-- active time windows
-- timing requirements and notes
-
-Example values currently included in the sample configuration:
-
-- sensor id: `0`
-- sensor name: `PIR-Front-1`
-- supported modes:
-  - `MOTION`
-  - `NO_MOTION`
-- `supportsDeepSleepAutonomy: true`
-
-## Build
-
-### Local build
-
-```sh
+```bash
 ./build.sh Target=linux
 ```
 
-### Other supported target
+At a high level, the `build.sh` script:
 
-```sh
-./build.sh Target=arm
+1. Stages Linux binder service-manager binaries, headers, and libraries into `build/usr`.
+2. Generates AIDL C++ headers for the Motion Sensor interface (AIDL “current”).
+3. Builds the AIDL support library via `aidl_lib/Makefile`.
+4. Clones and builds `ut-core` (checked out to `UT_CORE_VERSION`) and stages required headers.
+5. Builds the Motion Sensor service using CMake. The service executable is named `RDKMotionSensorService`.
+
+## Run Motion Sensor
+
+### Run the service on a target device
+
+To run the Motion Sensor Binder service:
+
+1. Copy the repository’s `build/` folder onto the target device (for example using `scp`), or otherwise ensure the built binary and `vcomponent_configurations/` directory are present on the target filesystem.
+2. Run the Motion Sensor service binary.
+
+The service executable is named:
+
+- `RDKMotionSensorService`
+
+### Command line interface
+
+The Motion Sensor service supports the following command line flags:
+
+- `--hfp <path>`: Optional HFP YAML path.
+  Default: `vcomponent_configurations/hfp-sensor.yaml`
+- `--port <port>`: Optional UT ControlPlane port to listen on.
+  Default: `8081`
+
+Example:
+
+```bash
+./RDKMotionSensorService --hfp vcomponent_configurations/hfp-sensor.yaml --port 8081
 ```
 
-## How the build works
+If `--help` (or `-h`) is provided, or if an unknown argument is provided, the service prints usage and exits with failure.
 
-The build script is motion-sensor specific and performs the following high-level steps:
-
-1. Checks out `rdk-halif-aidl` if it is not already present
-2. Builds Binder tooling from `rdk-halif-aidl`
-3. Builds the `sensor` HALIF module for the configured version
-4. Exports Binder/HALIF include and library paths
-5. Builds `ut-core`
-6. Copies shared/common headers
-7. Configures and builds this Motion Sensor project with CMake
-8. Installs outputs under `build/out/`
-
-The CMake configuration expects Binder and HALIF-generated artifacts to be available. If those dependencies are missing, configuration fails fast.
-
-## Build outputs
-
-The CMake project builds:
-
-- `motionsensor_core` shared library
-- `RDKMotionSensorService` executable
-
-It also copies `vcomponent_configurations/` into the build output as part of the build.
-
-## Service behavior
-
-The motion-sensor service entrypoint is implemented in:
-
-- `src/service/vcomponent_MotionSensorService.cpp`
-
-Current behavior:
-
-- accepts an optional YAML config path argument
-- defaults to `vcomponent_configurations/hfp-sensor-motion.yaml`
-- validates the argument count and trimmed config path
-- logs startup details
-- attempts to read the YAML file
-- continues even if the config file cannot be read
-- publishes the motion-sensor Binder manager and joins the threadpool
-
-## Notes about the current stub
-
-Although the repository contains:
-
-- a sample motion-sensor configuration
-- sensor/controller/listener classes
-- HALIF/Binder wiring
-
-the exposed runtime behavior is still intentionally minimal.
-
-At present, the code does **not** provide:
-
-- real motion sensor enumeration
-- hardware event delivery
-- actual start/stop motion detection
-- operational sensor state transitions driven by hardware
-- hardware-backed sensitivity or active-window enforcement
-
-## Cleaning build artifacts
-
-```sh
-./build.sh clean
-```
-
-To remove build products and checked-out dependencies:
-
-```sh
-./build.sh dist_clean
-```
-
-## Summary
-
-This repository is a **Motion Sensor vcomponent stub**, not an HDMI Input component.
-
-It is intended as the starting point for a real RDK motion-sensor Binder service implementation, with:
-
-- motion-sensor-specific source layout
-- sample motion HFP configuration
-- Binder/HALIF build integration
-- stub service and manager/controller classes ready for hardware integration

@@ -196,7 +196,7 @@ install_linux_binder()
 
     install -t ${BUILD_INSTALL_PREFIX}/bin ${LINUX_BINDER_OUT_DIR}/bin/*
     install -t ${BUILD_INSTALL_PREFIX}/lib ${LINUX_BINDER_OUT_DIR}/lib/*.so
-    install -t ${BUILD_INSTALL_PREFIX}/lib ${BINDER_SDK_DIR}/lib/halif/*
+    install -t ${BUILD_INSTALL_PREFIX}/lib ${BINDER_SDK_DIR}/lib/rdk-halif-aidl/*
     cp -apr ${BINDER_SDK_INCLUDE_DIR}/* ${BUILD_INSTALL_PREFIX}/include/
 }
 

@@ -80,7 +80,7 @@ if(USE_SYSROOT)
   set(EXTRA_INCLUDE
       "${CMAKE_SYSROOT}/usr/include"
       "${CMAKE_SYSROOT}/usr/include/vendor/sensor/${VCOMPONENT_VERSION}/include"
-      "${CMAKE_SYSROOT}/usr/include/vendor/common/${COMMON_VERSION}/include")
+      "${CMAKE_SYSROOT}/usr/include/vendor/common/${VCOMPONENT_INCLUDE_VERSION}/include")
 else()
   if(NOT DEFINED HALIF_INCLUDE_DIR OR
      NOT DEFINED BINDER_SDK_DIR OR
