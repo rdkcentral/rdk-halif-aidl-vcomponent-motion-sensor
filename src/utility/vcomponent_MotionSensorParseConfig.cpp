@@ -17,8 +17,8 @@
  * limitations under the License.
  */
 
-#include "utility/vcomponent_MotionSensor_ParseConfig.h"
-#include "utility/vcomponent_MotionSensor_helper.h"
+#include "utility/vcomponent_MotionSensorParseConfig.h"
+#include "utility/vcomponent_MotionSensorHelper.h"
 
 namespace vcomponent::utility
 {

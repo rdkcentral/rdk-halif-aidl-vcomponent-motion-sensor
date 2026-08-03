@@ -21,7 +21,7 @@
 #include "aidl/vcomponent_MotionSensorManager.h"
 
 #include "common/logger.h"
-#include "utility/vcomponent_MotionSensor_helper.h"
+#include "utility/vcomponent_MotionSensorHelper.h"
 
 #include <string>
 

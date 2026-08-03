@@ -112,8 +112,8 @@ set(MOTIONSENSOR_CORE_SOURCES
     src/aidl/vcomponent_MotionSensorController.cpp
     src/aidl/vcomponent_MotionSensorControllerListener.cpp
     src/aidl/vcomponent_MotionSensorEventListener.cpp
-    src/utility/vcomponent_MotionSensor_ParseConfig.cpp
-    src/utility/vcomponent_MotionSensor_helper.cpp
+    src/utility/vcomponent_MotionSensorParseConfig.cpp
+    src/utility/vcomponent_MotionSensorHelper.cpp
 )
 
 set(MOTIONSENSOR_SERVICE_SOURCES

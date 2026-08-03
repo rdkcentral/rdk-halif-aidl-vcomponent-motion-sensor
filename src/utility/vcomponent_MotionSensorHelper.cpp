@@ -17,7 +17,7 @@
  * limitations under the License.
  */
 
-#include "utility/vcomponent_MotionSensor_helper.h"
+#include "utility/vcomponent_MotionSensorHelper.h"
 
 #include <cctype>
 #include <fstream>
