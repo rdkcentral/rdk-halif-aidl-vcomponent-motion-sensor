@@ -37,7 +37,7 @@
  * @param[in] argc Argument count.
  * @param[in] argv Argument vector. argv[1] may specify an alternate YAML path.
  *
- * @return 0 on success, or 2 when argument validation fails.
+ * @return 0 on success, or 1 when validation fails.
  */
 int main(int argc, char** argv)
 {
@@ -53,14 +53,14 @@ int main(int argc, char** argv)
     if (argc > 2)
     {
         LOGF_ERR("%s: too many arguments. Usage: vcomponent_MotionSensorService [config.yaml]", componentName);
-        return 2;
+        return 1;
     }
 
     configPath = vcomponent::utility::trim(configPath);
     if (configPath.empty())
     {
         LOGF_ERR("%s: empty config path after trimming input", componentName);
-        return 2;
+        return 1;
     }
 
     LOGF_INFO(
@@ -74,12 +74,13 @@ int main(int argc, char** argv)
     if (!vcomponent::utility::loadMotionSensorHfpConfigFromYaml(
             configPath, &configuration, &parseError))
     {
-        LOGF_WARN(
-            "%s: Motion Sensor HFP YAML validation failed (continuing with stub-only service). "
+        LOGF_ERR(
+            "%s: Motion Sensor HFP YAML validation failed; service will not start. "
             "path=%s error=%s",
             componentName,
             configPath.c_str(),
             parseError.empty() ? "unknown parser error" : parseError.c_str());
+        return 1;
     }
     else
     {

@@ -51,11 +51,11 @@ struct MotionSensorActiveWindow
  */
 struct MotionSensorConfig
 {
-    int32_t id;
+    int32_t id = -1;
     std::string sensorName;
-    int32_t minSensitivity;
-    int32_t maxSensitivity;
-    bool supportsDeepSleepAutonomy;
+    int32_t minSensitivity = 0;
+    int32_t maxSensitivity = 0;
+    bool supportsDeepSleepAutonomy = false;
     MotionSensorDefaultStartConfig defaultStartConfig;
     std::vector<MotionSensorActiveWindow> activeWindows;
 };
