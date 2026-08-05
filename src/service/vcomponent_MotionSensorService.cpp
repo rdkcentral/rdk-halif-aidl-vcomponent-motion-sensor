@@ -18,24 +18,26 @@
  */
 
 #include "service/vcomponent_MotionSensorService.h"
+
 #include "aidl/vcomponent_MotionSensorManager.h"
 
 #include "common/logger.h"
+#include "utility/vcomponent_MotionSensorParseConfig.h"
 #include "utility/vcomponent_MotionSensorHelper.h"
 
 #include <string>
 
 /**
- * @brief Motion sensor stub-only service entrypoint.
+ * @brief Motion sensor service entrypoint.
  *
- * Accepts an optional configuration path argument, validates that the string is
- * non-empty after trimming, logs the selected stub-only motion-sensor service
- * name, and then publishes the Binder service threadpool.
+ * Accepts an optional configuration path argument, validates the configured
+ * Motion Sensor HFP YAML using the motion-sensor parser, logs validation
+ * results, and then publishes the Binder service threadpool.
  *
  * @param[in] argc Argument count.
  * @param[in] argv Argument vector. argv[1] may specify an alternate YAML path.
  *
- * @return 0 on success, or 2 when argument validation fails.
+ * @return 0 on success, or 1 when validation fails.
  */
 int main(int argc, char** argv)
 {
@@ -51,14 +53,14 @@ int main(int argc, char** argv)
     if (argc > 2)
     {
         LOGF_ERR("%s: too many arguments. Usage: vcomponent_MotionSensorService [config.yaml]", componentName);
-        return 2;
+        return 1;
     }
 
     configPath = vcomponent::utility::trim(configPath);
     if (configPath.empty())
     {
         LOGF_ERR("%s: empty config path after trimming input", componentName);
-        return 2;
+        return 1;
     }
 
     LOGF_INFO(
@@ -67,23 +69,29 @@ int main(int argc, char** argv)
         com::rdk::hal::sensor::motion::MotionSensorManager::getServiceName(),
         configPath.c_str());
 
-    const auto fileContentsOpt = vcomponent::utility::readFileToString(configPath);
-    if (!fileContentsOpt.has_value())
+    vcomponent::utility::MotionSensorHfpConfig configuration;
+    std::string parseError;
+    if (!vcomponent::utility::loadMotionSensorHfpConfigFromYaml(
+            configPath, &configuration, &parseError))
     {
-        LOGF_WARN(
-            "%s: config file could not be read for stub-only service (continuing). path=%s",
+        LOGF_ERR(
+            "%s: Motion Sensor HFP YAML validation failed; service will not start. "
+            "path=%s error=%s",
             componentName,
-            configPath.c_str());
+            configPath.c_str(),
+            parseError.empty() ? "unknown parser error" : parseError.c_str());
+        return 1;
     }
     else
     {
         LOGF_INFO(
-            "%s: config file OK for stub-only service. path=%s bytes=%llu",
+            "%s: Motion Sensor HFP YAML validation succeeded. path=%s sensors=%zu",
             componentName,
             configPath.c_str(),
-            static_cast<unsigned long long>(fileContentsOpt->size()));
+            configuration.sensors.size());
     }
 
     com::rdk::hal::sensor::motion::MotionSensorManager::publishAndJoinThreadPool();
     return 0;
 }
+

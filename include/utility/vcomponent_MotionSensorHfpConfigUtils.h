@@ -31,10 +31,10 @@ namespace vcomponent::utility
  */
 struct MotionSensorDefaultStartConfig
 {
-    std::string operationalMode{"MOTION"};
-    int32_t noMotionSeconds{5};
-    int32_t activeStartSeconds{0};
-    int32_t activeStopSeconds{0};
+    std::string operationalMode;
+    int32_t noMotionSeconds = 0;
+    int32_t activeStartSeconds = 0;
+    int32_t activeStopSeconds = 0;
 };
 
 /**
@@ -42,8 +42,8 @@ struct MotionSensorDefaultStartConfig
  */
 struct MotionSensorActiveWindow
 {
-    int32_t startTimeOfDaySeconds{0};
-    int32_t endTimeOfDaySeconds{0};
+    int32_t startTimeOfDaySeconds = 0;
+    int32_t endTimeOfDaySeconds = 0;
 };
 
 /**
@@ -51,13 +51,13 @@ struct MotionSensorActiveWindow
  */
 struct MotionSensorConfig
 {
-    int32_t id{0};
-    std::string sensorName{"PIR-Front-1"};
-    int32_t minSensitivity{1};
-    int32_t maxSensitivity{10};
-    bool supportsDeepSleepAutonomy{true};
-    MotionSensorDefaultStartConfig defaultStartConfig{};
-    std::vector<MotionSensorActiveWindow> activeWindows{};
+    int32_t id = -1;
+    std::string sensorName;
+    int32_t minSensitivity = 0;
+    int32_t maxSensitivity = 0;
+    bool supportsDeepSleepAutonomy = false;
+    MotionSensorDefaultStartConfig defaultStartConfig;
+    std::vector<MotionSensorActiveWindow> activeWindows;
 };
 
 /**
@@ -65,8 +65,7 @@ struct MotionSensorConfig
  */
 struct MotionSensorHfpConfig
 {
-    std::string interfaceVersion{"current"};
-    std::vector<MotionSensorConfig> sensors{};
+    std::vector<MotionSensorConfig> sensors;
 };
 
 /**
@@ -84,3 +83,4 @@ bool loadMotionSensorHfpConfigFromYaml(
     std::string* outError);
 
 } // namespace vcomponent::utility
+
