@@ -92,7 +92,7 @@ public:
      *
      * @param[out] _aidl_return Current sensitivity.
      *
-     * @return Successful Binder status or EX_NULL_POINTER.
+     * @return Successful Binder status.
      */
     android::binder::Status getSensitivity(int32_t* _aidl_return) override;
 
@@ -124,7 +124,7 @@ public:
      *
      * @param[out] _aidl_return Current autonomous deep-sleep setting.
      *
-     * @return Successful Binder status or EX_NULL_POINTER.
+     * @return Successful Binder status.
      */
     android::binder::Status isAutonomousDuringDeepSleepEnabled(bool* _aidl_return) override;
 
@@ -145,7 +145,7 @@ public:
      *
      * @param[out] _aidl_return Configured active windows.
      *
-     * @return Successful Binder status or EX_NULL_POINTER.
+     * @return Successful Binder status.
      */
     android::binder::Status getActiveWindows(std::vector<TimeWindow>* _aidl_return) override;
 
@@ -161,7 +161,6 @@ public:
 
 private:
     MotionSensor* m_parent{nullptr};
-    android::sp<IMotionSensorControllerListener> m_listener;
 };
 
 } // namespace com::rdk::hal::sensor::motion

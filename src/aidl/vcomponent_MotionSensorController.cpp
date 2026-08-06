@@ -59,9 +59,8 @@ android::binder::Status nullPointerStatus(const char* action)
 
 MotionSensorController::MotionSensorController(
     MotionSensor* parent,
-    const android::sp<IMotionSensorControllerListener>& listener)
+    const android::sp<IMotionSensorControllerListener>& /* listener */)
     : m_parent(parent)
-    , m_listener(listener)
 {
     LOGF_INFO("%s: created controller", componentName);
 }
@@ -155,6 +154,7 @@ android::binder::Status MotionSensorController::getStartConfig(StartConfig* _aid
 
     if (m_parent == nullptr)
     {
+        LOGF_ERR("%s: getStartConfig: missing parent sensor", componentName);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -163,6 +163,10 @@ android::binder::Status MotionSensorController::getStartConfig(StartConfig* _aid
         m_parent->m_state == State::STOPPED ||
         m_parent->m_state == State::ERROR)
     {
+        LOGF_WARN(
+            "%s: getStartConfig rejected because controller is inactive or not the current owner (state=%d)",
+            componentName,
+            static_cast<int32_t>(m_parent->m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -179,6 +183,7 @@ android::binder::Status MotionSensorController::getLastEventInfo(std::optional<L
 
     if (m_parent == nullptr)
     {
+        LOGF_ERR("%s: getLastEventInfo: missing parent sensor", componentName);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -187,6 +192,10 @@ android::binder::Status MotionSensorController::getLastEventInfo(std::optional<L
         m_parent->m_state == State::STOPPED ||
         m_parent->m_state == State::ERROR)
     {
+        LOGF_WARN(
+            "%s: getLastEventInfo rejected because controller is inactive or not the current owner (state=%d)",
+            componentName,
+            static_cast<int32_t>(m_parent->m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -196,22 +205,7 @@ android::binder::Status MotionSensorController::getLastEventInfo(std::optional<L
 
 android::binder::Status MotionSensorController::getSensitivity(int32_t* _aidl_return)
 {
-    if (_aidl_return == nullptr)
-    {
-        return nullPointerStatus("getSensitivity");
-    }
-
-    if (m_parent == nullptr)
-    {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-    }
-
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
-    if (m_parent->m_controller.get() != this)
-    {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-    }
-
     *_aidl_return = m_parent->m_sensitivity;
     return android::binder::Status::ok();
 }
@@ -227,18 +221,24 @@ android::binder::Status MotionSensorController::setSensitivity(int32_t sensitivi
 
     if (m_parent == nullptr)
     {
+        LOGF_ERR("%s: setSensitivity: missing parent sensor", componentName);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
     if (m_parent->m_controller.get() != this || m_parent->m_state != State::STOPPED)
     {
+        LOGF_WARN(
+            "%s: setSensitivity rejected because controller is not the current owner or sensor state=%d",
+            componentName,
+            static_cast<int32_t>(m_parent->m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
     if (m_parent->m_capabilities.minSensitivity == 0 &&
         m_parent->m_capabilities.maxSensitivity == 0)
     {
+        LOGF_WARN("%s: setSensitivity rejected because sensitivity control is unsupported", componentName);
         return android::binder::Status::ok();
     }
 
@@ -270,17 +270,25 @@ android::binder::Status MotionSensorController::setAutonomousDuringDeepSleep(boo
 
     if (m_parent == nullptr)
     {
+        LOGF_ERR("%s: setAutonomousDuringDeepSleep: missing parent sensor", componentName);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
     if (m_parent->m_controller.get() != this || m_parent->m_state != State::STOPPED)
     {
+        LOGF_WARN(
+            "%s: setAutonomousDuringDeepSleep rejected because controller is not the current owner or sensor state=%d",
+            componentName,
+            static_cast<int32_t>(m_parent->m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
     if (!m_parent->m_capabilities.supportsDeepSleepAutonomy)
     {
+        LOGF_WARN(
+            "%s: setAutonomousDuringDeepSleep rejected because deep-sleep autonomy is unsupported",
+            componentName);
         return android::binder::Status::ok();
     }
 
@@ -291,24 +299,8 @@ android::binder::Status MotionSensorController::setAutonomousDuringDeepSleep(boo
 
 android::binder::Status MotionSensorController::isAutonomousDuringDeepSleepEnabled(bool* _aidl_return)
 {
-    if (_aidl_return == nullptr)
-    {
-        return nullPointerStatus("isAutonomousDuringDeepSleepEnabled");
-    }
-
-    if (m_parent == nullptr)
-    {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-    }
-
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
-    if (m_parent->m_controller.get() != this)
-    {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-    }
-
-    *_aidl_return = m_parent->m_autonomousDuringDeepSleepEnabled &&
-                    m_parent->m_capabilities.supportsDeepSleepAutonomy;
+    *_aidl_return = m_parent->m_autonomousDuringDeepSleepEnabled;
     return android::binder::Status::ok();
 }
 
@@ -325,6 +317,7 @@ android::binder::Status MotionSensorController::setActiveWindows(
 
     if (m_parent == nullptr)
     {
+        LOGF_ERR("%s: setActiveWindows: missing parent sensor", componentName);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -344,6 +337,10 @@ android::binder::Status MotionSensorController::setActiveWindows(
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
     if (m_parent->m_controller.get() != this || m_parent->m_state != State::STOPPED)
     {
+        LOGF_WARN(
+            "%s: setActiveWindows rejected because controller is not the current owner or sensor state=%d",
+            componentName,
+            static_cast<int32_t>(m_parent->m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -354,22 +351,7 @@ android::binder::Status MotionSensorController::setActiveWindows(
 
 android::binder::Status MotionSensorController::getActiveWindows(std::vector<TimeWindow>* _aidl_return)
 {
-    if (_aidl_return == nullptr)
-    {
-        return nullPointerStatus("getActiveWindows");
-    }
-
-    if (m_parent == nullptr)
-    {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-    }
-
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
-    if (m_parent->m_controller.get() != this)
-    {
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
-    }
-
     *_aidl_return = m_parent->m_activeWindows;
     return android::binder::Status::ok();
 }
@@ -385,12 +367,17 @@ android::binder::Status MotionSensorController::clearActiveWindows(bool* _aidl_r
 
     if (m_parent == nullptr)
     {
+        LOGF_ERR("%s: clearActiveWindows: missing parent sensor", componentName);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
     if (m_parent->m_controller.get() != this || m_parent->m_state != State::STOPPED)
     {
+        LOGF_WARN(
+            "%s: clearActiveWindows rejected because controller is not the current owner or sensor state=%d",
+            componentName,
+            static_cast<int32_t>(m_parent->m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 

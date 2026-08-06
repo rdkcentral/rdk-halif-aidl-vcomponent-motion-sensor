@@ -21,7 +21,6 @@
 
 #include "aidl/vcomponent_MotionSensor.h"
 #include "common/logger.h"
-#include "utility/vcomponent_MotionSensorParseConfig.h"
 
 #include <com/rdk/hal/sensor/motion/OperationalMode.h>
 
@@ -33,18 +32,17 @@ namespace com::rdk::hal::sensor::motion
 namespace
 {
 constexpr const char* componentName = "MotionSensorManager";
-constexpr const char* defaultConfigPath = "vcomponent_configurations/hfp-sensor-motion.yaml";
 
-std::mutex& configPathMutex()
+std::mutex& configurationMutex()
 {
     static std::mutex mutex;
     return mutex;
 }
 
-std::string& configuredPath()
+vcomponent::utility::MotionSensorHfpConfig& configuredConfiguration()
 {
-    static std::string path = defaultConfigPath;
-    return path;
+    static vcomponent::utility::MotionSensorHfpConfig configuration;
+    return configuration;
 }
 
 OperationalMode operationalModeFromString(const std::string& value)
@@ -95,30 +93,19 @@ Capabilities toCapabilities(const vcomponent::utility::MotionSensorConfig& senso
 }
 } // namespace
 
-void MotionSensorManager::setConfigPath(const std::string& configPath)
+void MotionSensorManager::setConfiguration(
+    const vcomponent::utility::MotionSensorHfpConfig& configuration)
 {
-    std::lock_guard<std::mutex> lock(configPathMutex());
-    configuredPath() = configPath.empty() ? defaultConfigPath : configPath;
+    std::lock_guard<std::mutex> lock(configurationMutex());
+    configuredConfiguration() = configuration;
 }
 
 MotionSensorManager::MotionSensorManager()
 {
-    std::string path;
-    {
-        std::lock_guard<std::mutex> lock(configPathMutex());
-        path = configuredPath();
-    }
-
     vcomponent::utility::MotionSensorHfpConfig configuration;
-    std::string parseError;
-    if (!vcomponent::utility::loadMotionSensorHfpConfigFromYaml(path, &configuration, &parseError))
     {
-        LOGF_WARN(
-            "%s: initialized without configured sensors because HFP YAML parsing failed. path=%s error=%s",
-            componentName,
-            path.c_str(),
-            parseError.empty() ? "unknown parser error" : parseError.c_str());
-        return;
+        std::lock_guard<std::mutex> lock(configurationMutex());
+        configuration = configuredConfiguration();
     }
 
     std::lock_guard<std::mutex> lock(m_mutex);
@@ -154,30 +141,16 @@ MotionSensorManager::~MotionSensorManager() = default;
 android::binder::Status MotionSensorManager::getMotionSensorIds(
     std::optional<std::vector<std::optional<IMotionSensor::Id>>>* _aidl_return)
 {
-    if (_aidl_return == nullptr)
-    {
-        LOGF_ERR("%s: getMotionSensorIds: null _aidl_return", componentName);
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
-    }
-
     std::lock_guard<std::mutex> lock(m_mutex);
 
     std::vector<std::optional<IMotionSensor::Id>> ids;
     ids.reserve(m_sensors.size());
     for (const auto& sensor : m_sensors)
     {
-        if (sensor != nullptr)
-        {
-            ids.emplace_back(sensor->id());
-        }
+        ids.emplace_back(sensor->id());
     }
 
     *_aidl_return = std::move(ids);
-
-    LOGF_INFO(
-        "%s: getMotionSensorIds returning %zu sensor id(s)",
-        componentName,
-        _aidl_return->has_value() ? _aidl_return->value().size() : 0U);
     return android::binder::Status::ok();
 }
 

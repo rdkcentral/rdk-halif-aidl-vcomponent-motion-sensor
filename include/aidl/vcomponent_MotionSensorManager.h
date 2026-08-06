@@ -19,6 +19,8 @@
 
 #pragma once
 
+#include "utility/vcomponent_MotionSensorHfpConfigUtils.h"
+
 #include <com/rdk/hal/sensor/motion/BnMotionSensorManager.h>
 #include <com/rdk/hal/sensor/motion/IMotionSensor.h>
 #include <com/rdk/hal/sensor/motion/IMotionSensorManager.h>
@@ -58,15 +60,15 @@ public:
 
     // PUBLIC_INTERFACE
     /**
-     * @brief Set the HFP YAML path used by the next manager instance.
+     * @brief Set the parsed HFP configuration used by the next manager instance.
      *
-     * @param[in] configPath Path to the motion sensor HFP YAML profile.
+     * @param[in] configuration Parsed motion sensor HFP configuration.
      */
-    static void setConfigPath(const std::string& configPath);
+    static void setConfiguration(const vcomponent::utility::MotionSensorHfpConfig& configuration);
 
     // PUBLIC_INTERFACE
     /**
-     * @brief Construct the manager and initialize deterministic sensor state.
+     * @brief Construct the manager from the startup-parsed HFP configuration.
      */
     MotionSensorManager();
 
@@ -81,7 +83,7 @@ public:
      *
      * @param[out] _aidl_return Optional vector of configured sensor IDs.
      *
-     * @return Successful Binder status or EX_NULL_POINTER for a null return pointer.
+     * @return Successful Binder status.
      */
     android::binder::Status getMotionSensorIds(
         std::optional<std::vector<std::optional<IMotionSensor::Id>>>* _aidl_return) override;
