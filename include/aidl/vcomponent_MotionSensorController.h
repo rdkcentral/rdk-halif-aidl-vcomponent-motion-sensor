@@ -23,15 +23,13 @@
 #include <com/rdk/hal/sensor/motion/IMotionSensorController.h>
 #include <com/rdk/hal/sensor/motion/IMotionSensorControllerListener.h>
 
-#include <mutex>
-
 namespace com::rdk::hal::sensor::motion
 {
 
 class MotionSensor;
 
 /**
- * @brief Stub-only controller surface whose operational APIs are unsupported.
+ * @brief Exclusive controller surface for a motion sensor opened by a client.
  */
 class MotionSensorController final : public BnMotionSensorController
 {
@@ -51,42 +49,119 @@ public:
     MotionSensorController& operator=(const MotionSensorController&) = delete;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Start the motion sensor with the supplied configuration.
+     *
+     * @param[in] config Start configuration.
+     *
+     * @return Successful Binder status, EX_ILLEGAL_ARGUMENT, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status start(const StartConfig& config) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Stop the motion sensor.
+     *
+     * @return Successful Binder status or EX_ILLEGAL_STATE.
+     */
     android::binder::Status stop() override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Return the active start configuration.
+     *
+     * @param[out] _aidl_return Active session start configuration.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status getStartConfig(StartConfig* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Return diagnostic information for the most recent motion event.
+     *
+     * @param[out] _aidl_return Optional last-event diagnostic snapshot.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status getLastEventInfo(std::optional<LastEventInfo>* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Return the current sensitivity setting.
+     *
+     * @param[out] _aidl_return Current sensitivity.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER.
+     */
     android::binder::Status getSensitivity(int32_t* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Set the sensitivity while the sensor is stopped.
+     *
+     * @param[in] sensitivity Desired sensitivity.
+     * @param[out] _aidl_return true when set, false when unsupported.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, EX_ILLEGAL_ARGUMENT, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status setSensitivity(int32_t sensitivity, bool* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Enable or disable autonomous deep-sleep detection while stopped.
+     *
+     * @param[in] enabled Desired mode.
+     * @param[out] _aidl_return true when applied, false when unsupported.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status setAutonomousDuringDeepSleep(bool enabled, bool* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Query autonomous deep-sleep detection state.
+     *
+     * @param[out] _aidl_return Current autonomous deep-sleep setting.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER.
+     */
     android::binder::Status isAutonomousDuringDeepSleepEnabled(bool* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Replace active event-delivery windows while stopped.
+     *
+     * @param[in] windows Daily active windows.
+     * @param[out] _aidl_return true when accepted.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, EX_ILLEGAL_ARGUMENT, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status setActiveWindows(const std::vector<TimeWindow>& windows, bool* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Return configured active event-delivery windows.
+     *
+     * @param[out] _aidl_return Configured active windows.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER.
+     */
     android::binder::Status getActiveWindows(std::vector<TimeWindow>* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Clear active windows, enabling 24-hour monitoring.
+     *
+     * @param[out] _aidl_return true when cleared.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
+     */
     android::binder::Status clearActiveWindows(bool* _aidl_return) override;
 
 private:
     MotionSensor* m_parent{nullptr};
     android::sp<IMotionSensorControllerListener> m_listener;
-    mutable std::mutex m_mutex;
 };
 
 } // namespace com::rdk::hal::sensor::motion

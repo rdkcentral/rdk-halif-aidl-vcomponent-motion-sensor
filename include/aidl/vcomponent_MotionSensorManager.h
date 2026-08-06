@@ -28,6 +28,7 @@
 
 #include <mutex>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace com::rdk::hal::sensor::motion
@@ -36,7 +37,7 @@ namespace com::rdk::hal::sensor::motion
 class MotionSensor;
 
 /**
- * @brief Stub-only manager that exposes no hardware-backed motion sensors.
+ * @brief Binder service that exposes configured motion sensor instances.
  */
 class MotionSensorManager final
     : public android::BinderService<MotionSensorManager>
@@ -46,12 +47,22 @@ public:
     // PUBLIC_INTERFACE
     /**
      * @brief Return the well-known service name for the motion sensor manager.
+     *
+     * @return Binder service name from the generated AIDL interface.
      */
     static char const* getServiceName()
     {
         static const auto kServiceName = IMotionSensorManager::serviceName();
         return kServiceName.c_str();
     }
+
+    // PUBLIC_INTERFACE
+    /**
+     * @brief Set the HFP YAML path used by the next manager instance.
+     *
+     * @param[in] configPath Path to the motion sensor HFP YAML profile.
+     */
+    static void setConfigPath(const std::string& configPath);
 
     // PUBLIC_INTERFACE
     /**
@@ -65,10 +76,26 @@ public:
     MotionSensorManager& operator=(const MotionSensorManager&) = delete;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Return all configured motion sensor identifiers.
+     *
+     * @param[out] _aidl_return Optional vector of configured sensor IDs.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER for a null return pointer.
+     */
     android::binder::Status getMotionSensorIds(
         std::optional<std::vector<std::optional<IMotionSensor::Id>>>* _aidl_return) override;
 
     // PUBLIC_INTERFACE
+    /**
+     * @brief Return the motion sensor instance for a configured identifier.
+     *
+     * @param[in] motionSensorId Requested sensor identifier.
+     * @param[out] _aidl_return Sensor instance or nullptr if the ID is unknown.
+     *
+     * @return Successful Binder status, EX_ILLEGAL_ARGUMENT for an unknown sensor ID,
+     *         or EX_NULL_POINTER for a null return pointer.
+     */
     android::binder::Status getMotionSensor(
         const IMotionSensor::Id& motionSensorId,
         android::sp<IMotionSensor>* _aidl_return) override;

@@ -33,7 +33,6 @@
 #include <binder/IBinder.h>
 #include <binder/IInterface.h>
 
-#include <map>
 #include <mutex>
 #include <optional>
 #include <vector>
@@ -44,21 +43,29 @@ namespace com::rdk::hal::sensor::motion
 class MotionSensorController;
 
 /**
- * @brief Explicit stub-only binder implementation for a single motion sensor instance.
+ * @brief Binder implementation for a single configured motion sensor instance.
  *
- * The implementation intentionally provides no hardware-backed behavior and
- * rejects operational APIs as unsupported.
+ * This implementation follows the AIDL controller ownership model. One client
+ * may open the sensor for exclusive control while multiple clients may register
+ * event listeners.
  */
 class MotionSensor final : public BnMotionSensor, public android::IBinder::DeathRecipient
 {
 public:
     // PUBLIC_INTERFACE
     /**
-     * @brief Construct a motion sensor stub instance with the given sensor ID.
+     * @brief Construct a motion sensor instance with immutable capabilities and defaults.
      *
      * @param[in] id AIDL motion sensor identifier.
+     * @param[in] capabilities Immutable capability values for this sensor.
+     * @param[in] defaultStartConfig Factory default start configuration.
+     * @param[in] defaultActiveWindows Factory default active event windows.
      */
-    explicit MotionSensor(const IMotionSensor::Id& id);
+    MotionSensor(
+        const IMotionSensor::Id& id,
+        const Capabilities& capabilities,
+        const StartConfig& defaultStartConfig,
+        const std::vector<TimeWindow>& defaultActiveWindows);
 
     MotionSensor(const MotionSensor&) = delete;
     MotionSensor& operator=(const MotionSensor&) = delete;
@@ -66,18 +73,31 @@ public:
     // PUBLIC_INTERFACE
     /**
      * @brief Return immutable capabilities for this sensor.
+     *
+     * @param[out] _aidl_return Capability parcelable.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER for a null return pointer.
      */
     android::binder::Status getCapabilities(Capabilities* _aidl_return) override;
 
     // PUBLIC_INTERFACE
     /**
      * @brief Return the current lifecycle state.
+     *
+     * @param[out] _aidl_return Current state value.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER for a null return pointer.
      */
     android::binder::Status getState(State* _aidl_return) override;
 
     // PUBLIC_INTERFACE
     /**
      * @brief Open the sensor for exclusive controller ownership.
+     *
+     * @param[in] listener Controller lifecycle listener.
+     * @param[out] _aidl_return Newly opened controller, or nullptr on failure.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
      */
     android::binder::Status open(
         const android::sp<IMotionSensorControllerListener>& listener,
@@ -86,6 +106,11 @@ public:
     // PUBLIC_INTERFACE
     /**
      * @brief Close a previously opened controller session.
+     *
+     * @param[in] controller Controller returned by open().
+     * @param[out] _aidl_return true when the supplied controller was closed.
+     *
+     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
      */
     android::binder::Status close(
         const android::sp<IMotionSensorController>& controller,
@@ -94,6 +119,11 @@ public:
     // PUBLIC_INTERFACE
     /**
      * @brief Register a motion event listener.
+     *
+     * @param[in] motionSensorEventListener Listener to register.
+     * @param[out] _aidl_return true when newly registered, false when already registered.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER.
      */
     android::binder::Status registerEventListener(
         const android::sp<IMotionSensorEventListener>& motionSensorEventListener,
@@ -102,6 +132,11 @@ public:
     // PUBLIC_INTERFACE
     /**
      * @brief Unregister a motion event listener.
+     *
+     * @param[in] motionSensorEventListener Listener to unregister.
+     * @param[out] _aidl_return true when removed, false when not found.
+     *
+     * @return Successful Binder status or EX_NULL_POINTER.
      */
     android::binder::Status unregisterEventListener(
         const android::sp<IMotionSensorEventListener>& motionSensorEventListener,
@@ -110,6 +145,8 @@ public:
     // PUBLIC_INTERFACE
     /**
      * @brief Return the sensor identifier.
+     *
+     * @return Immutable sensor identifier.
      */
     const IMotionSensor::Id& id() const
     {
@@ -127,8 +164,15 @@ public:
 private:
     friend class ::com::rdk::hal::sensor::motion::MotionSensorController;
 
+    struct EventListenerRegistration
+    {
+        android::sp<android::IBinder> binder;
+        android::sp<IMotionSensorEventListener> listener;
+    };
+
     void binderDied(const ::android::wp<::android::IBinder>& who) override;
     bool controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const;
+    void releaseControllerLocked();
 
     mutable std::mutex m_mutex;
 
@@ -136,7 +180,7 @@ private:
     Capabilities m_capabilities{};
     State m_state{State::STOPPED};
 
-    int32_t m_sensitivity{1};
+    int32_t m_sensitivity{0};
     bool m_autonomousDuringDeepSleepEnabled{false};
 
     StartConfig m_startConfig{};
@@ -147,7 +191,7 @@ private:
     android::sp<IMotionSensorController> m_controller;
     android::sp<android::IBinder> m_ownerBinder;
 
-    std::map<::android::wp<::android::IBinder>, ::android::sp<IMotionSensorEventListener>> m_eventListeners;
+    std::vector<EventListenerRegistration> m_eventListeners;
 };
 
 } // namespace com::rdk::hal::sensor::motion

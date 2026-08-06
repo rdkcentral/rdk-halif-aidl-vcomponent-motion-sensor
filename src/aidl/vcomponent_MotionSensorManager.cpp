@@ -21,6 +21,11 @@
 
 #include "aidl/vcomponent_MotionSensor.h"
 #include "common/logger.h"
+#include "utility/vcomponent_MotionSensorParseConfig.h"
+
+#include <com/rdk/hal/sensor/motion/OperationalMode.h>
+
+#include <utils/String16.h>
 
 namespace com::rdk::hal::sensor::motion
 {
@@ -28,13 +33,120 @@ namespace com::rdk::hal::sensor::motion
 namespace
 {
 constexpr const char* componentName = "MotionSensorManager";
+constexpr const char* defaultConfigPath = "vcomponent_configurations/hfp-sensor-motion.yaml";
+
+std::mutex& configPathMutex()
+{
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::string& configuredPath()
+{
+    static std::string path = defaultConfigPath;
+    return path;
+}
+
+OperationalMode operationalModeFromString(const std::string& value)
+{
+    if (value == "NO_MOTION")
+    {
+        return OperationalMode::NO_MOTION;
+    }
+
+    return OperationalMode::MOTION;
+}
+
+StartConfig toStartConfig(const vcomponent::utility::MotionSensorDefaultStartConfig& config)
+{
+    StartConfig startConfig;
+    startConfig.operationalMode = operationalModeFromString(config.operationalMode);
+    startConfig.noMotionSeconds = config.noMotionSeconds;
+    startConfig.activeStartSeconds = config.activeStartSeconds;
+    startConfig.activeStopSeconds = config.activeStopSeconds;
+    return startConfig;
+}
+
+std::vector<TimeWindow> toTimeWindows(
+    const std::vector<vcomponent::utility::MotionSensorActiveWindow>& configuredWindows)
+{
+    std::vector<TimeWindow> windows;
+    windows.reserve(configuredWindows.size());
+
+    for (const auto& configuredWindow : configuredWindows)
+    {
+        TimeWindow window;
+        window.startTimeOfDaySeconds = configuredWindow.startTimeOfDaySeconds;
+        window.endTimeOfDaySeconds = configuredWindow.endTimeOfDaySeconds;
+        windows.push_back(window);
+    }
+
+    return windows;
+}
+
+Capabilities toCapabilities(const vcomponent::utility::MotionSensorConfig& sensor)
+{
+    Capabilities capabilities;
+    capabilities.sensorName = android::String16(sensor.sensorName.c_str());
+    capabilities.minSensitivity = sensor.minSensitivity;
+    capabilities.maxSensitivity = sensor.maxSensitivity;
+    capabilities.supportsDeepSleepAutonomy = sensor.supportsDeepSleepAutonomy;
+    return capabilities;
+}
+} // namespace
+
+void MotionSensorManager::setConfigPath(const std::string& configPath)
+{
+    std::lock_guard<std::mutex> lock(configPathMutex());
+    configuredPath() = configPath.empty() ? defaultConfigPath : configPath;
 }
 
 MotionSensorManager::MotionSensorManager()
 {
+    std::string path;
+    {
+        std::lock_guard<std::mutex> lock(configPathMutex());
+        path = configuredPath();
+    }
+
+    vcomponent::utility::MotionSensorHfpConfig configuration;
+    std::string parseError;
+    if (!vcomponent::utility::loadMotionSensorHfpConfigFromYaml(path, &configuration, &parseError))
+    {
+        LOGF_WARN(
+            "%s: initialized without configured sensors because HFP YAML parsing failed. path=%s error=%s",
+            componentName,
+            path.c_str(),
+            parseError.empty() ? "unknown parser error" : parseError.c_str());
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_sensors.reserve(configuration.sensors.size());
+
+    for (const auto& sensorConfig : configuration.sensors)
+    {
+        IMotionSensor::Id sensorId;
+        sensorId.value = sensorConfig.id;
+
+        m_sensors.push_back(
+            android::sp<MotionSensor>::make(
+                sensorId,
+                toCapabilities(sensorConfig),
+                toStartConfig(sensorConfig.defaultStartConfig),
+                toTimeWindows(sensorConfig.activeWindows)));
+
+        LOGF_INFO(
+            "%s: configured motion sensor id=%d name=%s",
+            componentName,
+            sensorConfig.id,
+            sensorConfig.sensorName.c_str());
+    }
+
     LOGF_INFO(
-        "%s: initialized in stub-only mode; no hardware-backed motion sensors are exposed",
-        componentName);
+        "%s: initialized with %zu configured motion sensor(s)",
+        componentName,
+        m_sensors.size());
 }
 
 MotionSensorManager::~MotionSensorManager() = default;
@@ -49,11 +161,23 @@ android::binder::Status MotionSensorManager::getMotionSensorIds(
     }
 
     std::lock_guard<std::mutex> lock(m_mutex);
-    *_aidl_return = std::vector<std::optional<IMotionSensor::Id>>{};
+
+    std::vector<std::optional<IMotionSensor::Id>> ids;
+    ids.reserve(m_sensors.size());
+    for (const auto& sensor : m_sensors)
+    {
+        if (sensor != nullptr)
+        {
+            ids.emplace_back(sensor->id());
+        }
+    }
+
+    *_aidl_return = std::move(ids);
 
     LOGF_INFO(
-        "%s: getMotionSensorIds returning an empty list because the implementation is stub-only",
-        componentName);
+        "%s: getMotionSensorIds returning %zu sensor id(s)",
+        componentName,
+        _aidl_return->has_value() ? _aidl_return->value().size() : 0U);
     return android::binder::Status::ok();
 }
 
@@ -69,11 +193,26 @@ android::binder::Status MotionSensorManager::getMotionSensor(
 
     *_aidl_return = nullptr;
 
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (const auto& sensor : m_sensors)
+    {
+        if (sensor != nullptr && sensor->id().value == motionSensorId.value)
+        {
+            *_aidl_return = sensor;
+            LOGF_INFO(
+                "%s: getMotionSensor returning sensor id=%d",
+                componentName,
+                static_cast<int>(motionSensorId.value));
+            return android::binder::Status::ok();
+        }
+    }
+
     LOGF_WARN(
-        "%s: getMotionSensor requested id=%d but no sensors are exposed because the implementation is stub-only",
+        "%s: getMotionSensor requested unknown id=%d",
         componentName,
         static_cast<int>(motionSensorId.value));
-    return android::binder::Status::ok();
+    return android::binder::Status::fromExceptionCode(
+        android::binder::Status::EX_ILLEGAL_ARGUMENT);
 }
 
 } // namespace com::rdk::hal::sensor::motion

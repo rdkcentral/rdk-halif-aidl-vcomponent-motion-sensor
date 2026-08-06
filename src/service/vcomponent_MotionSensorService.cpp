@@ -91,6 +91,7 @@ int main(int argc, char** argv)
             configuration.sensors.size());
     }
 
+    com::rdk::hal::sensor::motion::MotionSensorManager::setConfigPath(configPath);
     com::rdk::hal::sensor::motion::MotionSensorManager::publishAndJoinThreadPool();
     return 0;
 }
