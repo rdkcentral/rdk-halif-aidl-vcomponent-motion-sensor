@@ -141,6 +141,12 @@ MotionSensorManager::~MotionSensorManager() = default;
 android::binder::Status MotionSensorManager::getMotionSensorIds(
     std::optional<std::vector<std::optional<IMotionSensor::Id>>>* _aidl_return)
 {
+    if (_aidl_return == nullptr)
+    {
+        LOGF_ERR("%s: getMotionSensorIds: null _aidl_return", componentName);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
+    }
+
     std::lock_guard<std::mutex> lock(m_mutex);
 
     std::vector<std::optional<IMotionSensor::Id>> ids;
