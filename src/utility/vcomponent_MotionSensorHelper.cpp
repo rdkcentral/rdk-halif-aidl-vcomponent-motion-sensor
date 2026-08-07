@@ -19,6 +19,8 @@
 
 #include "utility/vcomponent_MotionSensorHelper.h"
 
+#include "common/logger.h"
+
 #include <cctype>
 #include <fstream>
 #include <sstream>
@@ -31,11 +33,18 @@ std::optional<std::string> readFileToString(const std::string& path)
     std::ifstream inputFile(path);
     if (!inputFile.is_open())
     {
+        LOGF_ERR("MotionSensorHelper: failed to open file for reading: path=%s", path.c_str());
         return std::nullopt;
     }
 
     std::ostringstream contentStream;
     contentStream << inputFile.rdbuf();
+    if (inputFile.bad())
+    {
+        LOGF_ERR("MotionSensorHelper: failed while reading file: path=%s", path.c_str());
+        return std::nullopt;
+    }
+
     return contentStream.str();
 }
 

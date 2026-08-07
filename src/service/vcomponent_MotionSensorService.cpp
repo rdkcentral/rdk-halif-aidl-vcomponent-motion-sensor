@@ -64,7 +64,7 @@ int main(int argc, char** argv)
     }
 
     LOGF_INFO(
-        "%s: starting stub-only motion sensor binder service (serviceName=%s, configPath=%s)",
+        "%s: starting motion sensor binder service (serviceName=%s, configPath=%s)",
         componentName,
         com::rdk::hal::sensor::motion::MotionSensorManager::getServiceName(),
         configPath.c_str());
@@ -91,6 +91,7 @@ int main(int argc, char** argv)
             configuration.sensors.size());
     }
 
+    com::rdk::hal::sensor::motion::MotionSensorManager::setConfiguration(configuration);
     com::rdk::hal::sensor::motion::MotionSensorManager::publishAndJoinThreadPool();
     return 0;
 }
