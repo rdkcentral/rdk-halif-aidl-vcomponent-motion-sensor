@@ -20,17 +20,39 @@
 #ifndef VCOMPONENT_MOTION_SENSOR_SERVICE_H_
 #define VCOMPONENT_MOTION_SENSOR_SERVICE_H_
 
+namespace vcomponent::motion
+{
+/**
+ * @brief Default Motion Sensor HFP configuration path.
+ *
+ * Used when the `--hfp` command-line option is omitted.
+ */
+inline constexpr const char* kDefaultMotionSensorHfpPath =
+    "vcomponent_configurations/hfp-sensor-motion.yaml";
+
+/**
+ * @brief Default motion-sensor control-plane TCP port.
+ *
+ * Used when the `--port` command-line option is omitted.
+ */
+inline constexpr int kDefaultMotionSensorControlPlanePort = 8084;
+} // namespace vcomponent::motion
+
 /**
  * @brief Starts the Motion Sensor Binder service.
  *
- * Accepts an optional path to the Motion Sensor YAML configuration file,
- * validates it, and publishes the Binder service threadpool.
+ * The service accepts optional named arguments in any order:
+ * `--hfp <path>` selects a Motion Sensor HFP YAML configuration, while
+ * `--port <1-65535>` selects the control-plane TCP port. When omitted, the
+ * HFP path defaults to
+ * `vcomponent_configurations/hfp-sensor-motion.yaml` and the port defaults to
+ * `8084`.
  *
  * @param[in] argc Number of command-line arguments.
- * @param[in] argv Command-line argument vector; argv[1] may provide a
- *                 configuration path.
+ * @param[in] argv Command-line argument vector.
  *
- * @return 0 when the service starts successfully, or 2 for invalid arguments.
+ * @return 0 when the service starts successfully, or 1 for invalid arguments,
+ *         configuration validation failures, or control-plane startup failures.
  */
 int main(int argc, char** argv);
 

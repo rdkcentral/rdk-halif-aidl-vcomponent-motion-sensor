@@ -1,37 +1,39 @@
-/*
- * If not stated otherwise in this file or this component's LICENSE file the
- * following copyright and licenses apply:
- *
- * Copyright 2026 RDK Management
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- * http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 #include "aidl/vcomponent_MotionSensor.h"
 
 #include "aidl/vcomponent_MotionSensorController.h"
 #include "common/logger.h"
 
+#include <com/rdk/hal/sensor/motion/MotionEvent.h>
+
 #include <binder/IInterface.h>
 
 #include <algorithm>
+#include <chrono>
+#include <ctime>
 
 namespace com::rdk::hal::sensor::motion
 {
 
 namespace
 {
-constexpr const char* componentName = "MotionSensor";
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensor>";
+
+int32_t currentLocalTimeOfDaySeconds()
+{
+    const std::time_t currentTime = std::time(nullptr);
+    std::tm localTime{};
+
+#if defined(_WIN32)
+    if (localtime_s(&localTime, &currentTime) != 0)
+#else
+    if (localtime_r(&currentTime, &localTime) == nullptr)
+#endif
+    {
+        return -1;
+    }
+
+    return (localTime.tm_hour * 60 * 60) + (localTime.tm_min * 60) + localTime.tm_sec;
+}
 
 android::sp<android::IBinder> binderForController(
     const android::sp<IMotionSensorController>& controller)
@@ -60,12 +62,14 @@ MotionSensor::MotionSensor(
     : m_id(id)
     , m_capabilities(capabilities)
     , m_sensitivity(capabilities.minSensitivity)
+    , m_autonomousDuringDeepSleepEnabled(false)
     , m_startConfig(defaultStartConfig)
+    , m_defaultActiveWindows(defaultActiveWindows)
     , m_activeWindows(defaultActiveWindows)
 {
     LOGF_INFO(
         "%s: created motion sensor id=%d sensitivity=%d",
-        componentName,
+        logPrefix,
         static_cast<int>(m_id.value),
         static_cast<int>(m_sensitivity));
 }
@@ -74,7 +78,7 @@ android::binder::Status MotionSensor::getCapabilities(Capabilities* _aidl_return
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: getCapabilities: null _aidl_return", componentName);
+        LOGF_ERR("%s: getCapabilities: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -87,7 +91,7 @@ android::binder::Status MotionSensor::getState(State* _aidl_return)
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: getState: null _aidl_return", componentName);
+        LOGF_ERR("%s: getState: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -102,7 +106,7 @@ android::binder::Status MotionSensor::open(
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: open: null _aidl_return", componentName);
+        LOGF_ERR("%s: open: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -110,21 +114,21 @@ android::binder::Status MotionSensor::open(
 
     if (listener == nullptr)
     {
-        LOGF_ERR("%s: open: null listener", componentName);
+        LOGF_ERR("%s: open: null listener", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
     android::sp<android::IBinder> ownerBinder = binderForControllerListener(listener);
     if (ownerBinder == nullptr)
     {
-        LOGF_ERR("%s: open: listener has no Binder identity", componentName);
+        LOGF_ERR("%s: open: listener has no Binder identity", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
     std::lock_guard<std::mutex> lock(m_mutex);
     if (m_controller != nullptr)
     {
-        LOGF_WARN("%s: open rejected because sensor id=%d is already open", componentName, m_id.value);
+        LOGF_WARN("%s: open rejected because sensor id=%d is already open", logPrefix, m_id.value);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
@@ -138,12 +142,12 @@ android::binder::Status MotionSensor::open(
     {
         LOGF_WARN(
             "%s: open could not link controller listener death recipient for sensor id=%d status=%d",
-            componentName,
+            logPrefix,
             m_id.value,
             static_cast<int>(linkStatus));
     }
 
-    LOGF_INFO("%s: opened sensor id=%d", componentName, m_id.value);
+    LOGF_INFO("%s: opened sensor id=%d", logPrefix, m_id.value);
     return android::binder::Status::ok();
 }
 
@@ -153,7 +157,7 @@ android::binder::Status MotionSensor::close(
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: close: null _aidl_return", componentName);
+        LOGF_ERR("%s: close: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -161,7 +165,7 @@ android::binder::Status MotionSensor::close(
 
     if (controller == nullptr)
     {
-        LOGF_ERR("%s: close: null controller", componentName);
+        LOGF_ERR("%s: close: null controller", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -170,7 +174,7 @@ android::binder::Status MotionSensor::close(
     {
         LOGF_WARN(
             "%s: close rejected for sensor id=%d while state=%d",
-            componentName,
+            logPrefix,
             m_id.value,
             static_cast<int32_t>(m_state));
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
@@ -178,7 +182,7 @@ android::binder::Status MotionSensor::close(
 
     if (!controllerMatchesLocked(controller))
     {
-        LOGF_WARN("%s: close supplied non-owner controller for sensor id=%d", componentName, m_id.value);
+        LOGF_WARN("%s: close supplied non-owner controller for sensor id=%d", logPrefix, m_id.value);
         return android::binder::Status::ok();
     }
 
@@ -190,7 +194,7 @@ android::binder::Status MotionSensor::close(
     releaseControllerLocked();
     *_aidl_return = true;
 
-    LOGF_INFO("%s: closed sensor id=%d", componentName, m_id.value);
+    LOGF_INFO("%s: closed sensor id=%d", logPrefix, m_id.value);
     return android::binder::Status::ok();
 }
 
@@ -200,7 +204,7 @@ android::binder::Status MotionSensor::registerEventListener(
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: registerEventListener: null _aidl_return", componentName);
+        LOGF_ERR("%s: registerEventListener: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -208,14 +212,14 @@ android::binder::Status MotionSensor::registerEventListener(
 
     if (motionSensorEventListener == nullptr)
     {
-        LOGF_ERR("%s: registerEventListener: null listener", componentName);
+        LOGF_ERR("%s: registerEventListener: null listener", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
     android::sp<android::IBinder> listenerBinder = binderForEventListener(motionSensorEventListener);
     if (listenerBinder == nullptr)
     {
-        LOGF_ERR("%s: registerEventListener: listener has no Binder identity", componentName);
+        LOGF_ERR("%s: registerEventListener: listener has no Binder identity", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -231,7 +235,7 @@ android::binder::Status MotionSensor::registerEventListener(
     {
         LOGF_INFO(
             "%s: registerEventListener ignored duplicate listener for sensor id=%d",
-            componentName,
+            logPrefix,
             m_id.value);
         return android::binder::Status::ok();
     }
@@ -241,7 +245,7 @@ android::binder::Status MotionSensor::registerEventListener(
 
     LOGF_INFO(
         "%s: registered event listener for sensor id=%d totalListeners=%zu",
-        componentName,
+        logPrefix,
         m_id.value,
         m_eventListeners.size());
     return android::binder::Status::ok();
@@ -253,7 +257,7 @@ android::binder::Status MotionSensor::unregisterEventListener(
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: unregisterEventListener: null _aidl_return", componentName);
+        LOGF_ERR("%s: unregisterEventListener: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -261,14 +265,14 @@ android::binder::Status MotionSensor::unregisterEventListener(
 
     if (motionSensorEventListener == nullptr)
     {
-        LOGF_ERR("%s: unregisterEventListener: null listener", componentName);
+        LOGF_ERR("%s: unregisterEventListener: null listener", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
     android::sp<android::IBinder> listenerBinder = binderForEventListener(motionSensorEventListener);
     if (listenerBinder == nullptr)
     {
-        LOGF_ERR("%s: unregisterEventListener: listener has no Binder identity", componentName);
+        LOGF_ERR("%s: unregisterEventListener: listener has no Binder identity", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -284,7 +288,7 @@ android::binder::Status MotionSensor::unregisterEventListener(
     {
         LOGF_INFO(
             "%s: unregisterEventListener did not find listener for sensor id=%d",
-            componentName,
+            logPrefix,
             m_id.value);
         return android::binder::Status::ok();
     }
@@ -294,10 +298,148 @@ android::binder::Status MotionSensor::unregisterEventListener(
 
     LOGF_INFO(
         "%s: unregistered event listener for sensor id=%d totalListeners=%zu",
-        componentName,
+        logPrefix,
         m_id.value,
         m_eventListeners.size());
     return android::binder::Status::ok();
+}
+
+bool MotionSensor::injectMotionEvent()
+{
+    MotionEvent event{};
+    event.mode = OperationalMode::MOTION;
+    event.timestampMonotonicMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+                                     .count();
+
+    std::vector<android::sp<IMotionSensorEventListener>> listeners;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != State::STARTED)
+        {
+            LOGF_INFO(
+                "%s: suppressing motion event for sensor id=%d because state=%d",
+                logPrefix,
+                m_id.value,
+                static_cast<int32_t>(m_state));
+            return false;
+        }
+
+        const int32_t timeOfDaySeconds = currentLocalTimeOfDaySeconds();
+        if (timeOfDaySeconds < 0 || !isWithinActiveWindowLocked(timeOfDaySeconds))
+        {
+            LOGF_INFO(
+                "%s: suppressing motion event outside active window for sensor id=%d "
+                "timeOfDaySeconds=%d configuredWindows=%zu",
+                logPrefix,
+                m_id.value,
+                timeOfDaySeconds,
+                m_activeWindows.size());
+            return false;
+        }
+
+        listeners.reserve(m_eventListeners.size());
+        for (const EventListenerRegistration& registration : m_eventListeners)
+        {
+            listeners.push_back(registration.listener);
+        }
+
+        LOGF_INFO(
+            "%s: delivering motion event for sensor id=%d listenerCount=%zu timeOfDaySeconds=%d",
+            logPrefix,
+            m_id.value,
+            listeners.size(),
+            timeOfDaySeconds);
+    }
+
+    for (const android::sp<IMotionSensorEventListener>& listener : listeners)
+    {
+        if (listener == nullptr)
+        {
+            continue;
+        }
+
+        const android::binder::Status notifyStatus = listener->onEvent(event);
+        if (!notifyStatus.isOk())
+        {
+            LOGF_WARN(
+                "%s: motion event callback failed for sensor id=%d exception=%d",
+                logPrefix,
+                m_id.value,
+                notifyStatus.exceptionCode());
+        }
+    }
+
+    return true;
+}
+
+bool MotionSensor::injectNoMotionEvent()
+{
+    MotionEvent event{};
+    event.mode = OperationalMode::NO_MOTION;
+    event.timestampMonotonicMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch())
+                                     .count();
+
+    std::vector<android::sp<IMotionSensorEventListener>> listeners;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        if (m_state != State::STARTED)
+        {
+            LOGF_INFO(
+                "%s: suppressing no-motion event for sensor id=%d because state=%d",
+                logPrefix,
+                m_id.value,
+                static_cast<int32_t>(m_state));
+            return false;
+        }
+
+        const int32_t timeOfDaySeconds = currentLocalTimeOfDaySeconds();
+        if (timeOfDaySeconds < 0 || !isWithinActiveWindowLocked(timeOfDaySeconds))
+        {
+            LOGF_INFO(
+                "%s: suppressing no-motion event outside active window for sensor id=%d "
+                "timeOfDaySeconds=%d configuredWindows=%zu",
+                logPrefix,
+                m_id.value,
+                timeOfDaySeconds,
+                m_activeWindows.size());
+            return false;
+        }
+
+        listeners.reserve(m_eventListeners.size());
+        for (const EventListenerRegistration& registration : m_eventListeners)
+        {
+            listeners.push_back(registration.listener);
+        }
+
+        LOGF_INFO(
+            "%s: delivering no-motion event for sensor id=%d listenerCount=%zu timeOfDaySeconds=%d",
+            logPrefix,
+            m_id.value,
+            listeners.size(),
+            timeOfDaySeconds);
+    }
+
+    for (const android::sp<IMotionSensorEventListener>& listener : listeners)
+    {
+        if (listener == nullptr)
+        {
+            continue;
+        }
+
+        const android::binder::Status notifyStatus = listener->onEvent(event);
+        if (!notifyStatus.isOk())
+        {
+            LOGF_WARN(
+                "%s: no-motion event callback failed for sensor id=%d exception=%d",
+                logPrefix,
+                m_id.value,
+                notifyStatus.exceptionCode());
+        }
+    }
+
+    return true;
 }
 
 void MotionSensor::changeStateLocked(std::unique_lock<std::mutex>& lock, State newState)
@@ -313,7 +455,7 @@ void MotionSensor::changeStateLocked(std::unique_lock<std::mutex>& lock, State n
 
     LOGF_INFO(
         "%s: sensor id=%d state changed %d -> %d",
-        componentName,
+        logPrefix,
         m_id.value,
         static_cast<int32_t>(oldState),
         static_cast<int32_t>(newState));
@@ -326,12 +468,58 @@ void MotionSensor::changeStateLocked(std::unique_lock<std::mutex>& lock, State n
         {
             LOGF_WARN(
                 "%s: onStateChanged callback failed for sensor id=%d exception=%d",
-                componentName,
+                logPrefix,
                 m_id.value,
                 notifyStatus.exceptionCode());
         }
         lock.lock();
     }
+}
+
+void MotionSensor::activateAfterDelay(uint64_t lifecycleGeneration, int32_t activeStopSeconds)
+{
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_lifecycleGeneration != lifecycleGeneration || m_state != State::STARTING)
+    {
+        return;
+    }
+
+    LOGF_INFO(
+        "%s: activating sensor id=%d after configured activation delay",
+        logPrefix,
+        m_id.value);
+    changeStateLocked(lock, State::STARTED);
+
+    if (activeStopSeconds <= 0)
+    {
+        return;
+    }
+
+    std::thread([this, lifecycleGeneration, activeStopSeconds]() {
+        std::this_thread::sleep_for(std::chrono::seconds(activeStopSeconds));
+        stopAfterDelay(lifecycleGeneration);
+    }).detach();
+}
+
+void MotionSensor::stopAfterDelay(uint64_t lifecycleGeneration)
+{
+    std::unique_lock<std::mutex> lock(m_mutex);
+    if (m_lifecycleGeneration != lifecycleGeneration || m_state != State::STARTED)
+    {
+        return;
+    }
+
+    LOGF_INFO(
+        "%s: automatically stopping sensor id=%d after activeStopSeconds",
+        logPrefix,
+        m_id.value);
+    changeStateLocked(lock, State::STOPPING);
+    changeStateLocked(lock, State::STOPPED);
+}
+
+void MotionSensor::invalidateLifecycleTimersLocked()
+{
+    ++m_lifecycleGeneration;
 }
 
 bool MotionSensor::controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const
@@ -346,8 +534,39 @@ bool MotionSensor::controllerMatchesLocked(const android::sp<IMotionSensorContro
     return expected != nullptr && expected == supplied;
 }
 
+bool MotionSensor::isWithinActiveWindowLocked(int32_t timeOfDaySeconds) const
+{
+    // An empty list is the documented clearActiveWindows() policy: 24-hour monitoring.
+    if (m_activeWindows.empty())
+    {
+        return true;
+    }
+
+    for (const TimeWindow& window : m_activeWindows)
+    {
+        const int32_t start = window.startTimeOfDaySeconds;
+        const int32_t end = window.endTimeOfDaySeconds;
+
+        // Equal endpoints intentionally represent a full-day active window.
+        if (start == end)
+        {
+            return true;
+        }
+
+        if ((start < end && timeOfDaySeconds >= start && timeOfDaySeconds <= end) ||
+            (start > end && (timeOfDaySeconds >= start || timeOfDaySeconds <= end)))
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void MotionSensor::releaseControllerLocked()
 {
+    invalidateLifecycleTimersLocked();
+
     if (m_ownerBinder != nullptr)
     {
         const android::status_t unlinkStatus = m_ownerBinder->unlinkToDeath(this);
@@ -355,16 +574,25 @@ void MotionSensor::releaseControllerLocked()
         {
             LOGF_WARN(
                 "%s: unlinkToDeath returned status=%d for sensor id=%d",
-                componentName,
+                logPrefix,
                 static_cast<int>(unlinkStatus),
                 m_id.value);
         }
     }
 
+    // Deep-sleep autonomy is configured through the active controller. Reset
+    // it at session end so a prior test/client cannot suppress events for the
+    // next controller session. This matches the service-start default.
+    m_autonomousDuringDeepSleepEnabled = m_capabilities.supportsDeepSleepAutonomy;
+
+    // Active windows are likewise controller-session configuration. Without
+    // this reset, a previous clearActiveWindows() call enables 24-hour
+    // monitoring for later tests until the service is restarted.
+    m_activeWindows = m_defaultActiveWindows;
+
     m_ownerBinder.clear();
     m_controller.clear();
     m_controllerListener.clear();
-    m_lastEventInfo.reset();
 }
 
 void MotionSensor::binderDied(const ::android::wp<::android::IBinder>& who)
@@ -379,8 +607,10 @@ void MotionSensor::binderDied(const ::android::wp<::android::IBinder>& who)
 
     LOGF_WARN(
         "%s: controller owner died; implicitly stopping and closing sensor id=%d",
-        componentName,
+        logPrefix,
         m_id.value);
+
+    invalidateLifecycleTimersLocked();
 
     if (m_state != State::STOPPED)
     {

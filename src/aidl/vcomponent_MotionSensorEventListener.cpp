@@ -26,7 +26,7 @@ namespace com::rdk::hal::sensor::motion
 
 namespace
 {
-constexpr const char* componentName = "MotionSensorEventListener";
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensorEventListener>";
 }
 
 android::binder::Status MotionSensorEventListener::onEvent(const MotionEvent& event)
@@ -35,7 +35,7 @@ android::binder::Status MotionSensorEventListener::onEvent(const MotionEvent& ev
 
     // The AIDL contract is one-way, so acknowledge receipt without blocking
     // the Binder callback thread or applying hardware-specific behavior.
-    LOGF_INFO("%s: onEvent received by stub-only listener", componentName);
+    LOGF_INFO("%s: onEvent received by stub-only listener", logPrefix);
     return android::binder::Status::ok();
 }
 

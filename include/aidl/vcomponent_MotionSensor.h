@@ -33,8 +33,10 @@
 #include <binder/IBinder.h>
 #include <binder/IInterface.h>
 
+#include <cstdint>
 #include <mutex>
 #include <optional>
+#include <thread>
 #include <vector>
 
 namespace com::rdk::hal::sensor::motion
@@ -144,6 +146,32 @@ public:
 
     // PUBLIC_INTERFACE
     /**
+     * @brief Inject a motion event through registered event listeners.
+     *
+     * The event is delivered only while the sensor is started and the local
+     * time-of-day falls within a configured active window. An empty window list
+     * and a window with equal endpoints permit 24-hour monitoring. Listener
+     * callbacks are invoked without holding the sensor mutex.
+     *
+     * @return true when the event was accepted for injection; otherwise false.
+     */
+    bool injectMotionEvent();
+
+    // PUBLIC_INTERFACE
+    /**
+     * @brief Inject a no-motion event through registered event listeners.
+     *
+     * The event is delivered only while the sensor is started and the local
+     * time-of-day falls within a configured active window. An empty window list
+     * and a window with equal endpoints permit 24-hour monitoring. Listener
+     * callbacks are invoked without holding the sensor mutex.
+     *
+     * @return true when the event was accepted for injection; otherwise false.
+     */
+    bool injectNoMotionEvent();
+
+    // PUBLIC_INTERFACE
+    /**
      * @brief Return the sensor identifier.
      *
      * @return Immutable sensor identifier.
@@ -172,6 +200,10 @@ private:
 
     void binderDied(const ::android::wp<::android::IBinder>& who) override;
     bool controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const;
+    bool isWithinActiveWindowLocked(int32_t timeOfDaySeconds) const;
+    void activateAfterDelay(uint64_t lifecycleGeneration, int32_t activeStopSeconds);
+    void stopAfterDelay(uint64_t lifecycleGeneration);
+    void invalidateLifecycleTimersLocked();
     void releaseControllerLocked();
 
     mutable std::mutex m_mutex;
@@ -184,8 +216,13 @@ private:
     bool m_autonomousDuringDeepSleepEnabled{false};
 
     StartConfig m_startConfig{};
+    // Runtime window changes belong to a controller session. Keep the HFP
+    // defaults separately so the next session cannot inherit prior test/client
+    // timing configuration.
+    std::vector<TimeWindow> m_defaultActiveWindows{};
     std::vector<TimeWindow> m_activeWindows{};
     std::optional<LastEventInfo> m_lastEventInfo{};
+    uint64_t m_lifecycleGeneration{0};
 
     android::sp<IMotionSensorControllerListener> m_controllerListener;
     android::sp<IMotionSensorController> m_controller;

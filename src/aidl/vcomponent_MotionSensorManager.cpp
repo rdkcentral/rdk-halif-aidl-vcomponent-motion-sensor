@@ -31,7 +31,7 @@ namespace com::rdk::hal::sensor::motion
 
 namespace
 {
-constexpr const char* componentName = "MotionSensorManager";
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensorManager>";
 
 std::mutex& configurationMutex()
 {
@@ -125,14 +125,14 @@ MotionSensorManager::MotionSensorManager()
 
         LOGF_INFO(
             "%s: configured motion sensor id=%d name=%s",
-            componentName,
+            logPrefix,
             sensorConfig.id,
             sensorConfig.sensorName.c_str());
     }
 
     LOGF_INFO(
         "%s: initialized with %zu configured motion sensor(s)",
-        componentName,
+        logPrefix,
         m_sensors.size());
 }
 
@@ -143,7 +143,7 @@ android::binder::Status MotionSensorManager::getMotionSensorIds(
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: getMotionSensorIds: null _aidl_return", componentName);
+        LOGF_ERR("%s: getMotionSensorIds: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -166,7 +166,7 @@ android::binder::Status MotionSensorManager::getMotionSensor(
 {
     if (_aidl_return == nullptr)
     {
-        LOGF_ERR("%s: getMotionSensor: null _aidl_return", componentName);
+        LOGF_ERR("%s: getMotionSensor: null _aidl_return", logPrefix);
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_NULL_POINTER);
     }
 
@@ -180,7 +180,7 @@ android::binder::Status MotionSensorManager::getMotionSensor(
             *_aidl_return = sensor;
             LOGF_INFO(
                 "%s: getMotionSensor returning sensor id=%d",
-                componentName,
+                logPrefix,
                 static_cast<int>(motionSensorId.value));
             return android::binder::Status::ok();
         }
@@ -188,7 +188,7 @@ android::binder::Status MotionSensorManager::getMotionSensor(
 
     LOGF_WARN(
         "%s: getMotionSensor requested unknown id=%d",
-        componentName,
+        logPrefix,
         static_cast<int>(motionSensorId.value));
     return android::binder::Status::fromExceptionCode(
         android::binder::Status::EX_ILLEGAL_ARGUMENT);

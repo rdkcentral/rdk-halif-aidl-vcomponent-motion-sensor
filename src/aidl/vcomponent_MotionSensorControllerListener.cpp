@@ -26,14 +26,14 @@ namespace com::rdk::hal::sensor::motion
 
 namespace
 {
-constexpr const char* componentName = "MotionSensorControllerListener";
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensorControllerListener>";
 }
 
 android::binder::Status MotionSensorControllerListener::onStateChanged(State oldState, State newState)
 {
     LOGF_INFO(
         "%s: onStateChanged: oldState=%d newState=%d",
-        componentName,
+        logPrefix,
         static_cast<int32_t>(oldState),
         static_cast<int32_t>(newState));
     return android::binder::Status::ok();
@@ -41,13 +41,13 @@ android::binder::Status MotionSensorControllerListener::onStateChanged(State old
 
 android::binder::Status MotionSensorControllerListener::onActiveWindowEntered()
 {
-    LOGF_INFO("%s: onActiveWindowEntered", componentName);
+    LOGF_INFO("%s: onActiveWindowEntered", logPrefix);
     return android::binder::Status::ok();
 }
 
 android::binder::Status MotionSensorControllerListener::onActiveWindowExited()
 {
-    LOGF_INFO("%s: onActiveWindowExited", componentName);
+    LOGF_INFO("%s: onActiveWindowExited", logPrefix);
     return android::binder::Status::ok();
 }
 

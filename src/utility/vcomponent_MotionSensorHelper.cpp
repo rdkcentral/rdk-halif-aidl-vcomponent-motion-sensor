@@ -27,13 +27,17 @@
 
 namespace vcomponent::utility
 {
+namespace
+{
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensorHelper>";
+} // namespace
 
 std::optional<std::string> readFileToString(const std::string& path)
 {
     std::ifstream inputFile(path);
     if (!inputFile.is_open())
     {
-        LOGF_ERR("MotionSensorHelper: failed to open file for reading: path=%s", path.c_str());
+        LOGF_ERR("%s: failed to open file for reading: path=%s", logPrefix, path.c_str());
         return std::nullopt;
     }
 
@@ -41,7 +45,7 @@ std::optional<std::string> readFileToString(const std::string& path)
     contentStream << inputFile.rdbuf();
     if (inputFile.bad())
     {
-        LOGF_ERR("MotionSensorHelper: failed while reading file: path=%s", path.c_str());
+        LOGF_ERR("%s: failed while reading file: path=%s", logPrefix, path.c_str());
         return std::nullopt;
     }
 

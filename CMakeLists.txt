@@ -112,6 +112,7 @@ set(MOTIONSENSOR_CORE_SOURCES
     src/aidl/vcomponent_MotionSensorController.cpp
     src/aidl/vcomponent_MotionSensorControllerListener.cpp
     src/aidl/vcomponent_MotionSensorEventListener.cpp
+    src/controller/vcomponent_MotionSensorControlPlane.cpp
     src/utility/vcomponent_MotionSensorParseConfig.cpp
     src/utility/vcomponent_MotionSensorHelper.cpp
 )
@@ -343,3 +344,9 @@ install(DIRECTORY ${PROJECT_INCLUDE_DIR}/common/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/common
   FILES_MATCHING PATTERN "*.h"
 )
+
+install(DIRECTORY ${PROJECT_INCLUDE_DIR}/controller/
+  DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/controller
+  FILES_MATCHING PATTERN "*.h"
+)
+
