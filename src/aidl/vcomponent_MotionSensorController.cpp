@@ -22,9 +22,7 @@
 #include "aidl/vcomponent_MotionSensor.h"
 #include "common/logger.h"
 
-#include <chrono>
 #include <com/rdk/hal/sensor/motion/OperationalMode.h>
-#include <thread>
 
 namespace com::rdk::hal::sensor::motion
 {
@@ -118,10 +116,10 @@ android::binder::Status MotionSensorController::start(const StartConfig& config)
             "%s: delaying sensor activation by %d seconds",
             logPrefix,
             config.activeStartSeconds);
-        std::thread([parent = m_parent, lifecycleGeneration, config]() {
-            std::this_thread::sleep_for(std::chrono::seconds(config.activeStartSeconds));
-            parent->activateAfterDelay(lifecycleGeneration, config.activeStopSeconds);
-        }).detach();
+        m_parent->startLifecycleTimerLocked(
+            lifecycleGeneration,
+            config.activeStartSeconds,
+            config.activeStopSeconds);
     }
     else
     {
@@ -129,10 +127,10 @@ android::binder::Status MotionSensorController::start(const StartConfig& config)
 
         if (config.activeStopSeconds > 0)
         {
-            std::thread([parent = m_parent, lifecycleGeneration, config]() {
-                std::this_thread::sleep_for(std::chrono::seconds(config.activeStopSeconds));
-                parent->stopAfterDelay(lifecycleGeneration);
-            }).detach();
+            m_parent->startLifecycleTimerLocked(
+                lifecycleGeneration,
+                0,
+                config.activeStopSeconds);
         }
     }
 
@@ -232,7 +230,24 @@ android::binder::Status MotionSensorController::getLastEventInfo(std::optional<L
 
 android::binder::Status MotionSensorController::getSensitivity(int32_t* _aidl_return)
 {
+    if (_aidl_return == nullptr)
+    {
+        return nullPointerStatus("getSensitivity");
+    }
+
+    if (m_parent == nullptr)
+    {
+        LOGF_ERR("%s: getSensitivity: missing parent sensor", logPrefix);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
+    if (m_parent->m_controller.get() != this)
+    {
+        LOGF_WARN("%s: getSensitivity rejected because controller is not the current owner", logPrefix);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+
     *_aidl_return = m_parent->m_sensitivity;
     return android::binder::Status::ok();
 }
@@ -326,7 +341,28 @@ android::binder::Status MotionSensorController::setAutonomousDuringDeepSleep(boo
 
 android::binder::Status MotionSensorController::isAutonomousDuringDeepSleepEnabled(bool* _aidl_return)
 {
+    if (_aidl_return == nullptr)
+    {
+        return nullPointerStatus("isAutonomousDuringDeepSleepEnabled");
+    }
+
+    if (m_parent == nullptr)
+    {
+        LOGF_ERR(
+            "%s: isAutonomousDuringDeepSleepEnabled: missing parent sensor",
+            logPrefix);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
+    if (m_parent->m_controller.get() != this)
+    {
+        LOGF_WARN(
+            "%s: isAutonomousDuringDeepSleepEnabled rejected because controller is not the current owner",
+            logPrefix);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+
     *_aidl_return = m_parent->m_autonomousDuringDeepSleepEnabled;
     return android::binder::Status::ok();
 }
@@ -378,7 +414,24 @@ android::binder::Status MotionSensorController::setActiveWindows(
 
 android::binder::Status MotionSensorController::getActiveWindows(std::vector<TimeWindow>* _aidl_return)
 {
+    if (_aidl_return == nullptr)
+    {
+        return nullPointerStatus("getActiveWindows");
+    }
+
+    if (m_parent == nullptr)
+    {
+        LOGF_ERR("%s: getActiveWindows: missing parent sensor", logPrefix);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+
     std::lock_guard<std::mutex> lock(m_parent->m_mutex);
+    if (m_parent->m_controller.get() != this)
+    {
+        LOGF_WARN("%s: getActiveWindows rejected because controller is not the current owner", logPrefix);
+        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
+    }
+
     *_aidl_return = m_parent->m_activeWindows;
     return android::binder::Status::ok();
 }

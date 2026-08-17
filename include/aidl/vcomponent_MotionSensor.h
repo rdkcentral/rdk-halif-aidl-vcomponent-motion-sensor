@@ -33,6 +33,7 @@
 #include <binder/IBinder.h>
 #include <binder/IInterface.h>
 
+#include <condition_variable>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -68,6 +69,15 @@ public:
         const Capabilities& capabilities,
         const StartConfig& defaultStartConfig,
         const std::vector<TimeWindow>& defaultActiveWindows);
+
+    // PUBLIC_INTERFACE
+    /**
+     * @brief Destroy the sensor after cancelling and joining its lifecycle timer.
+     *
+     * The destructor prevents delayed lifecycle work from accessing a sensor
+     * after the manager releases its final Binder reference.
+     */
+    ~MotionSensor() override;
 
     MotionSensor(const MotionSensor&) = delete;
     MotionSensor& operator=(const MotionSensor&) = delete;
@@ -203,10 +213,18 @@ private:
     bool isWithinActiveWindowLocked(int32_t timeOfDaySeconds) const;
     void activateAfterDelay(uint64_t lifecycleGeneration, int32_t activeStopSeconds);
     void stopAfterDelay(uint64_t lifecycleGeneration);
+    void startLifecycleTimerLocked(
+        uint64_t lifecycleGeneration,
+        int32_t activationDelaySeconds,
+        int32_t activeStopSeconds);
+    void cancelLifecycleTimerLocked();
     void invalidateLifecycleTimersLocked();
     void releaseControllerLocked();
 
     mutable std::mutex m_mutex;
+    std::condition_variable m_lifecycleTimerCondition;
+    std::thread m_lifecycleTimerThread;
+    bool m_lifecycleTimerCancelled{false};
 
     IMotionSensor::Id m_id{};
     Capabilities m_capabilities{};

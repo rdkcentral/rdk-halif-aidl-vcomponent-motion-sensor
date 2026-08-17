@@ -1,3 +1,22 @@
+/*
+ * If not stated otherwise in this file or this component's LICENSE file the
+ * following copyright and licenses apply:
+ *
+ * Copyright 2026 RDK Management
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 #include "aidl/vcomponent_MotionSensor.h"
 
 #include "aidl/vcomponent_MotionSensorController.h"
@@ -9,6 +28,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <ctime>
 
 namespace com::rdk::hal::sensor::motion
@@ -72,6 +92,23 @@ MotionSensor::MotionSensor(
         logPrefix,
         static_cast<int>(m_id.value),
         static_cast<int>(m_sensitivity));
+}
+
+MotionSensor::~MotionSensor()
+{
+    std::thread lifecycleTimer;
+    {
+        std::lock_guard<std::mutex> lock(m_mutex);
+        m_lifecycleTimerCancelled = true;
+        ++m_lifecycleGeneration;
+        m_lifecycleTimerCondition.notify_all();
+        lifecycleTimer = std::move(m_lifecycleTimerThread);
+    }
+
+    if (lifecycleTimer.joinable())
+    {
+        lifecycleTimer.join();
+    }
 }
 
 android::binder::Status MotionSensor::getCapabilities(Capabilities* _aidl_return)
@@ -489,16 +526,6 @@ void MotionSensor::activateAfterDelay(uint64_t lifecycleGeneration, int32_t acti
         logPrefix,
         m_id.value);
     changeStateLocked(lock, State::STARTED);
-
-    if (activeStopSeconds <= 0)
-    {
-        return;
-    }
-
-    std::thread([this, lifecycleGeneration, activeStopSeconds]() {
-        std::this_thread::sleep_for(std::chrono::seconds(activeStopSeconds));
-        stopAfterDelay(lifecycleGeneration);
-    }).detach();
 }
 
 void MotionSensor::stopAfterDelay(uint64_t lifecycleGeneration)
@@ -517,9 +544,83 @@ void MotionSensor::stopAfterDelay(uint64_t lifecycleGeneration)
     changeStateLocked(lock, State::STOPPED);
 }
 
+void MotionSensor::startLifecycleTimerLocked(
+    uint64_t lifecycleGeneration,
+    int32_t activationDelaySeconds,
+    int32_t activeStopSeconds)
+{
+    cancelLifecycleTimerLocked();
+    m_lifecycleTimerCancelled = false;
+    m_lifecycleTimerThread = std::thread(
+        [this, lifecycleGeneration, activationDelaySeconds, activeStopSeconds]() {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            const auto waitForCancellation = [this, &lock](int32_t seconds) -> bool {
+                return m_lifecycleTimerCondition.wait_for(
+                    lock,
+                    std::chrono::seconds(seconds),
+                    [this]() { return m_lifecycleTimerCancelled; });
+            };
+
+            if (activationDelaySeconds > 0 && waitForCancellation(activationDelaySeconds))
+            {
+                return;
+            }
+
+            if (m_lifecycleTimerCancelled || m_lifecycleGeneration != lifecycleGeneration)
+            {
+                return;
+            }
+
+            if (activationDelaySeconds > 0 && m_state == State::STARTING)
+            {
+                LOGF_INFO(
+                    "%s: activating sensor id=%d after configured activation delay",
+                    logPrefix,
+                    m_id.value);
+                changeStateLocked(lock, State::STARTED);
+            }
+
+            if (activeStopSeconds <= 0 || waitForCancellation(activeStopSeconds))
+            {
+                return;
+            }
+
+            if (m_lifecycleTimerCancelled ||
+                m_lifecycleGeneration != lifecycleGeneration ||
+                m_state != State::STARTED)
+            {
+                return;
+            }
+
+            LOGF_INFO(
+                "%s: automatically stopping sensor id=%d after activeStopSeconds",
+                logPrefix,
+                m_id.value);
+            changeStateLocked(lock, State::STOPPING);
+            changeStateLocked(lock, State::STOPPED);
+        });
+}
+
+void MotionSensor::cancelLifecycleTimerLocked()
+{
+    m_lifecycleTimerCancelled = true;
+    m_lifecycleTimerCondition.notify_all();
+
+    if (!m_lifecycleTimerThread.joinable())
+    {
+        return;
+    }
+
+    std::thread lifecycleTimer = std::move(m_lifecycleTimerThread);
+    m_mutex.unlock();
+    lifecycleTimer.join();
+    m_mutex.lock();
+}
+
 void MotionSensor::invalidateLifecycleTimersLocked()
 {
     ++m_lifecycleGeneration;
+    cancelLifecycleTimerLocked();
 }
 
 bool MotionSensor::controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const
@@ -580,10 +681,9 @@ void MotionSensor::releaseControllerLocked()
         }
     }
 
-    // Deep-sleep autonomy is configured through the active controller. Reset
-    // it at session end so a prior test/client cannot suppress events for the
-    // next controller session. This matches the service-start default.
-    m_autonomousDuringDeepSleepEnabled = m_capabilities.supportsDeepSleepAutonomy;
+    // Deep-sleep autonomy is controller-session configuration. The service
+    // starts disabled and every subsequent session restores that same default.
+    m_autonomousDuringDeepSleepEnabled = false;
 
     // Active windows are likewise controller-session configuration. Without
     // this reset, a previous clearActiveWindows() call enables 24-hour
