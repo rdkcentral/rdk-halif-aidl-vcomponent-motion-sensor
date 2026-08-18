@@ -364,7 +364,7 @@ bool MotionSensor::injectMotionEvent()
         std::lock_guard<std::mutex> lock(m_mutex);
         if (m_state != State::STARTED)
         {
-            LOGF_INFO(
+            LOGF_WARN(
                 "%s: suppressing motion event for sensor id=%d because state=%d",
                 logPrefix,
                 m_id.value,
@@ -741,6 +741,7 @@ void MotionSensor::binderDied(const ::android::wp<::android::IBinder>& who)
     std::unique_lock<std::mutex> lock(m_mutex);
     if (m_ownerBinder == nullptr || (deadBinder != nullptr && deadBinder != m_ownerBinder))
     {
+        LOGF_WARN("%s: controller death notification ignored", logPrefix);
         return;
     }
 
