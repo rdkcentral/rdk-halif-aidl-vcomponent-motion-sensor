@@ -180,10 +180,7 @@ int main(int argc, char** argv)
         return 1;
     }
 
-    // Publish the same manager instance that the control plane references.
-    // Using BinderService::publishAndJoinThreadPool() would allocate a second
-    // MotionSensorManager, causing injected events and Binder state changes to
-    // target different MotionSensor objects.
+    // Publish the instance shared with the control plane.
     const android::status_t addServiceStatus = android::defaultServiceManager()->addService(
         android::String16(
             com::rdk::hal::sensor::motion::MotionSensorManager::getServiceName()),

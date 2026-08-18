@@ -33,8 +33,7 @@ android::binder::Status MotionSensorEventListener::onEvent(const MotionEvent& ev
 {
     (void)event;
 
-    // The AIDL contract is one-way, so acknowledge receipt without blocking
-    // the Binder callback thread or applying hardware-specific behavior.
+    // Acknowledge the one-way callback.
     LOGF_INFO("%s: onEvent received by stub-only listener", logPrefix);
     return android::binder::Status::ok();
 }

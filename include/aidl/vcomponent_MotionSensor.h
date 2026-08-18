@@ -161,24 +161,12 @@ public:
      * The event is delivered only while the sensor is started and the local
      * time-of-day falls within a configured active window. An empty window list
      * and a window with equal endpoints permit 24-hour monitoring. Listener
-     * callbacks are invoked without holding the sensor mutex.
+     * callbacks are invoked without holding the sensor mutex. In NO_MOTION
+     * mode, a detected motion instead restarts the configured inactivity timer.
      *
-     * @return true when the event was accepted for injection; otherwise false.
+     * @return true when the physical motion was accepted; otherwise false.
      */
     bool injectMotionEvent();
-
-    // PUBLIC_INTERFACE
-    /**
-     * @brief Inject a no-motion event through registered event listeners.
-     *
-     * The event is delivered only while the sensor is started and the local
-     * time-of-day falls within a configured active window. An empty window list
-     * and a window with equal endpoints permit 24-hour monitoring. Listener
-     * callbacks are invoked without holding the sensor mutex.
-     *
-     * @return true when the event was accepted for injection; otherwise false.
-     */
-    bool injectNoMotionEvent();
 
     // PUBLIC_INTERFACE
     /**
@@ -211,13 +199,13 @@ private:
     void binderDied(const ::android::wp<::android::IBinder>& who) override;
     bool controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const;
     bool isWithinActiveWindowLocked(int32_t timeOfDaySeconds) const;
-    void activateAfterDelay(uint64_t lifecycleGeneration, int32_t activeStopSeconds);
-    void stopAfterDelay(uint64_t lifecycleGeneration);
     void startLifecycleTimerLocked(
         uint64_t lifecycleGeneration,
         int32_t activationDelaySeconds,
         int32_t activeStopSeconds);
     void cancelLifecycleTimerLocked();
+    void startNoMotionTimerLocked();
+    void cancelNoMotionTimerLocked();
     void invalidateLifecycleTimersLocked();
     void releaseControllerLocked();
 
@@ -225,6 +213,9 @@ private:
     std::condition_variable m_lifecycleTimerCondition;
     std::thread m_lifecycleTimerThread;
     bool m_lifecycleTimerCancelled{false};
+    std::condition_variable m_noMotionTimerCondition;
+    std::thread m_noMotionTimerThread;
+    bool m_noMotionTimerCancelled{false};
 
     IMotionSensor::Id m_id{};
     Capabilities m_capabilities{};
@@ -234,13 +225,12 @@ private:
     bool m_autonomousDuringDeepSleepEnabled{false};
 
     StartConfig m_startConfig{};
-    // Runtime window changes belong to a controller session. Keep the HFP
-    // defaults separately so the next session cannot inherit prior test/client
-    // timing configuration.
+    // Restore HFP defaults for each controller session.
     std::vector<TimeWindow> m_defaultActiveWindows{};
     std::vector<TimeWindow> m_activeWindows{};
     std::optional<LastEventInfo> m_lastEventInfo{};
     uint64_t m_lifecycleGeneration{0};
+    uint64_t m_noMotionTimerGeneration{0};
 
     android::sp<IMotionSensorControllerListener> m_controllerListener;
     android::sp<IMotionSensorController> m_controller;

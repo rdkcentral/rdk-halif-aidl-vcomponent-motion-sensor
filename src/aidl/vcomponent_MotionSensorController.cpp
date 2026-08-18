@@ -124,6 +124,7 @@ android::binder::Status MotionSensorController::start(const StartConfig& config)
     else
     {
         m_parent->changeStateLocked(lock, State::STARTED);
+        m_parent->startNoMotionTimerLocked();
 
         if (config.activeStopSeconds > 0)
         {
@@ -331,7 +332,8 @@ android::binder::Status MotionSensorController::setAutonomousDuringDeepSleep(boo
         LOGF_WARN(
             "%s: setAutonomousDuringDeepSleep rejected because deep-sleep autonomy is unsupported",
             logPrefix);
-        return android::binder::Status::ok();
+        return android::binder::Status::fromExceptionCode(
+            android::binder::Status::EX_UNSUPPORTED_OPERATION);
     }
 
     m_parent->m_autonomousDuringDeepSleepEnabled = enabled;

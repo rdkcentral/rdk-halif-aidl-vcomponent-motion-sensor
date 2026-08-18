@@ -114,7 +114,8 @@ public:
      * @param[in] enabled Desired mode.
      * @param[out] _aidl_return true when applied, false when unsupported.
      *
-     * @return Successful Binder status, EX_NULL_POINTER, or EX_ILLEGAL_STATE.
+     * @return Successful Binder status, EX_NULL_POINTER, EX_ILLEGAL_STATE, or
+     *         EX_UNSUPPORTED_OPERATION when the HFP does not support deep-sleep autonomy.
      */
     android::binder::Status setAutonomousDuringDeepSleep(bool enabled, bool* _aidl_return) override;
 
