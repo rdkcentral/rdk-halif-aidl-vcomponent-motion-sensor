@@ -62,10 +62,8 @@ From the repository root:
 At a high level, the `build.sh` script:
 
 1. Stages Linux binder service-manager binaries, headers, and libraries into `build/usr`.
-2. Generates AIDL C++ headers for the Motion Sensor interface (AIDL “current”).
-3. Builds the AIDL support library via `aidl_lib/Makefile`.
-4. Clones and builds `ut-core` (checked out to `UT_CORE_VERSION`) and stages required headers.
-5. Builds the Motion Sensor service using CMake. The service executable is named `RDKMotionSensorService`.
+2. Clones and builds `ut-core` (checked out to `UT_CORE_VERSION`) and stages required headers.
+3. Builds the Motion Sensor service using CMake. The service executable is named `RDKMotionSensorService`.
 
 ## Run Motion Sensor
 
