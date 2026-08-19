@@ -39,6 +39,7 @@ namespace
 
 constexpr const char* MOTION_SENSOR_ROOT = "sensor.motion";
 constexpr const char* MOTION_SENSOR_LIST = "sensor.motion";
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensorParseConfig>";
 constexpr size_t KVP_BUFFER_SIZE = UT_KVP_MAX_ELEMENT_SIZE;
 
 void setError(std::string* outError, const std::string& message)
@@ -316,9 +317,10 @@ bool getMotionSensorInfo(
         sensor.activeWindows.push_back(window);
     }
     LOGF_INFO(
-        "Motion Sensor parsed (index=%u, id=%d, name='%s', sensitivity=[%d,%d], "
+        "%s: Motion Sensor parsed (index=%u, id=%d, name='%s', sensitivity=[%d,%d], "
         "deepSleepAutonomy=%s, mode='%s', noMotionSeconds=%d, activeStartSeconds=%d, "
         "activeStopSeconds=%d, activeWindows=%zu)",
+        logPrefix,
         index,
         sensor.id,
         sensor.sensorName.c_str(),
@@ -441,11 +443,11 @@ bool loadMotionSensorHfpConfigFromYaml(
     auto fail = [&](const std::string& message) {
         *outConfig = MotionSensorHfpConfig{};
         setError(outError, message);
-        LOGF_ERROR("Motion Sensor YAML parsing failed (path='%s'): %s", path.c_str(), message.c_str());
+        LOGF_ERROR("%s: Motion Sensor YAML parsing failed (path='%s'): %s", logPrefix, path.c_str(), message.c_str());
         return false;
     };
 
-    LOGF_INFO("Motion Sensor YAML parsing started (path='%s')", path.c_str());
+    LOGF_INFO("%s: Motion Sensor YAML parsing started (path='%s')", logPrefix, path.c_str());
 
     MotionSensorHfpConfig parsedConfig;
     if (!parseMotionSensorConfig(path.c_str(), parsedConfig, outError))
@@ -462,7 +464,8 @@ bool loadMotionSensorHfpConfigFromYaml(
     }
 
     LOGF_INFO(
-        "Motion Sensor YAML parsing succeeded (path='%s', sensors=%zu)",
+        "%s: Motion Sensor YAML parsing succeeded (path='%s', sensors=%zu)",
+        logPrefix,
         path.c_str(),
         outConfig->sensors.size());
     return true;

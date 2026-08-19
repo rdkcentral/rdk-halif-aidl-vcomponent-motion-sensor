@@ -20,54 +20,131 @@
 #include "service/vcomponent_MotionSensorService.h"
 
 #include "aidl/vcomponent_MotionSensorManager.h"
-
 #include "common/logger.h"
-#include "utility/vcomponent_MotionSensorParseConfig.h"
+#include "controller/vcomponent_MotionSensorControlPlane.h"
 #include "utility/vcomponent_MotionSensorHelper.h"
+#include "utility/vcomponent_MotionSensorParseConfig.h"
 
+#include <binder/IPCThreadState.h>
+#include <binder/IServiceManager.h>
+#include <binder/ProcessState.h>
+#include <utils/String16.h>
+
+#include <cerrno>
+#include <climits>
+#include <cstdlib>
 #include <string>
+
+namespace
+{
+constexpr const char* logPrefix = "[VDEVICE_MOTION]<MotionSensorService>";
+constexpr const char* kHfpArgument = "--hfp";
+constexpr const char* kPortArgument = "--port";
+
+void logUsage()
+{
+    LOGF_ERR(
+        "%s: usage: vcomponent_MotionSensorService "
+        "[--hfp <path>] [--port <1-65535>]",
+        logPrefix);
+}
+
+bool parsePort(const char* value, int* outPort)
+{
+    if (value == nullptr || outPort == nullptr || value[0] == '\0')
+    {
+        return false;
+    }
+
+    errno = 0;
+    char* end = nullptr;
+    const long parsedPort = std::strtol(value, &end, 10);
+    if (errno == ERANGE || end == value || *end != '\0' ||
+        parsedPort < 1 || parsedPort > 65535 || parsedPort > INT_MAX)
+    {
+        return false;
+    }
+
+    *outPort = static_cast<int>(parsedPort);
+    return true;
+}
+} // namespace
 
 /**
  * @brief Motion sensor service entrypoint.
  *
- * Accepts an optional configuration path argument, validates the configured
- * Motion Sensor HFP YAML using the motion-sensor parser, logs validation
- * results, and then publishes the Binder service threadpool.
+ * Parses optional `--hfp` and `--port` arguments, validates the Motion Sensor
+ * HFP YAML, starts the UT control plane, and publishes the Binder service.
  *
  * @param[in] argc Argument count.
- * @param[in] argv Argument vector. argv[1] may specify an alternate YAML path.
+ * @param[in] argv Argument vector.
  *
- * @return 0 on success, or 1 when validation fails.
+ * @return 0 on success, or 1 when arguments, configuration, or control-plane
+ *         initialization are invalid.
  */
 int main(int argc, char** argv)
 {
-    constexpr const char* componentName = "MotionSensorService";
-    constexpr const char* defaultConfigPath = "vcomponent_configurations/hfp-sensor-motion.yaml";
+    std::string configPath = vcomponent::motion::kDefaultMotionSensorHfpPath;
+    int controlPlanePort = vcomponent::motion::kDefaultMotionSensorControlPlanePort;
 
-    std::string configPath = defaultConfigPath;
-    if (argc > 1 && argv != nullptr && argv[1] != nullptr)
+    if (argv == nullptr)
     {
-        configPath = argv[1];
-    }
-
-    if (argc > 2)
-    {
-        LOGF_ERR("%s: too many arguments. Usage: vcomponent_MotionSensorService [config.yaml]", componentName);
+        LOGF_ERR("%s: argument vector is null", logPrefix);
         return 1;
     }
 
-    configPath = vcomponent::utility::trim(configPath);
-    if (configPath.empty())
+    for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex)
     {
-        LOGF_ERR("%s: empty config path after trimming input", componentName);
-        return 1;
+        const char* argument = argv[argumentIndex];
+        if (argument == nullptr)
+        {
+            LOGF_ERR("%s: argument %d is null", logPrefix, argumentIndex);
+            return 1;
+        }
+
+        if (std::string(argument) == kHfpArgument)
+        {
+            if (++argumentIndex >= argc || argv[argumentIndex] == nullptr)
+            {
+                LOGF_ERR("%s: --hfp requires a configuration path", logPrefix);
+                logUsage();
+                return 1;
+            }
+
+            configPath = vcomponent::utility::trim(argv[argumentIndex]);
+            if (configPath.empty())
+            {
+                LOGF_ERR("%s: --hfp configuration path must not be empty", logPrefix);
+                return 1;
+            }
+        }
+        else if (std::string(argument) == kPortArgument)
+        {
+            if (++argumentIndex >= argc ||
+                !parsePort(argv[argumentIndex], &controlPlanePort))
+            {
+                LOGF_ERR(
+                    "%s: --port requires an integer in the range 1 through 65535",
+                    logPrefix);
+                logUsage();
+                return 1;
+            }
+        }
+        else
+        {
+            LOGF_ERR("%s: unrecognized argument: %s", logPrefix, argument);
+            logUsage();
+            return 1;
+        }
     }
 
     LOGF_INFO(
-        "%s: starting motion sensor binder service (serviceName=%s, configPath=%s)",
-        componentName,
+        "%s: starting motion sensor Binder service "
+        "(serviceName=%s, configPath=%s, controlPlanePort=%d)",
+        logPrefix,
         com::rdk::hal::sensor::motion::MotionSensorManager::getServiceName(),
-        configPath.c_str());
+        configPath.c_str(),
+        controlPlanePort);
 
     vcomponent::utility::MotionSensorHfpConfig configuration;
     std::string parseError;
@@ -77,22 +154,52 @@ int main(int argc, char** argv)
         LOGF_ERR(
             "%s: Motion Sensor HFP YAML validation failed; service will not start. "
             "path=%s error=%s",
-            componentName,
+            logPrefix,
             configPath.c_str(),
             parseError.empty() ? "unknown parser error" : parseError.c_str());
         return 1;
     }
-    else
-    {
-        LOGF_INFO(
-            "%s: Motion Sensor HFP YAML validation succeeded. path=%s sensors=%zu",
-            componentName,
-            configPath.c_str(),
-            configuration.sensors.size());
-    }
+
+    LOGF_INFO(
+        "%s: Motion Sensor HFP YAML validation succeeded. path=%s sensors=%zu",
+        logPrefix,
+        configPath.c_str(),
+        configuration.sensors.size());
 
     com::rdk::hal::sensor::motion::MotionSensorManager::setConfiguration(configuration);
-    com::rdk::hal::sensor::motion::MotionSensorManager::publishAndJoinThreadPool();
+    auto manager = android::sp<com::rdk::hal::sensor::motion::MotionSensorManager>::make();
+
+    if (!vcomponent::motion::startMotionSensorControlPlane(
+            manager.get(),
+            controlPlanePort))
+    {
+        LOGF_ERR(
+            "%s: failed to start motion-sensor control plane on port=%d",
+            logPrefix,
+            controlPlanePort);
+        return 1;
+    }
+
+    // Publish the instance shared with the control plane.
+    const android::status_t addServiceStatus = android::defaultServiceManager()->addService(
+        android::String16(
+            com::rdk::hal::sensor::motion::MotionSensorManager::getServiceName()),
+        manager);
+    if (addServiceStatus != android::OK)
+    {
+        LOGF_ERR(
+            "%s: failed to publish motion sensor Binder service status=%d",
+            logPrefix,
+            static_cast<int>(addServiceStatus));
+        vcomponent::motion::stopMotionSensorControlPlane();
+        return 1;
+    }
+
+    android::sp<android::ProcessState> processState(android::ProcessState::self());
+    processState->startThreadPool();
+    processState->giveThreadPoolName();
+    android::IPCThreadState::self()->joinThreadPool();
+
+    vcomponent::motion::stopMotionSensorControlPlane();
     return 0;
 }
-

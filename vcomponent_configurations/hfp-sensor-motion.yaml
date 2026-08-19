@@ -38,7 +38,7 @@ sensor:
       sensitivity_range:
         minSensitivity: 1                     # Capabilities.minSensitivity
         maxSensitivity: 10                    # Capabilities.maxSensitivity
-      supportsDeepSleepAutonomy: true         # Capabilities.supportsDeepSleepAutonomy
+      supportsDeepSleepAutonomy: false        # Capabilities.supportsDeepSleepAutonomy
       
       # ========================================================================
       # PLATFORM DEFAULTS AND CAPABILITY DECLARATIONS
@@ -65,14 +65,16 @@ sensor:
         activeStopSeconds: 0          # StartConfig.activeStopSeconds (0 = no auto-stop)
       active_windows:          # Factory default active windows (example values)
         # Example: Monitor during business hours (9am-5pm) and evening (8pm-10pm)
-        - startTimeOfDaySeconds: 32400  # 09:00:00 (9 * 3600)
-          endTimeOfDaySeconds: 61200    # 17:00:00 (17 * 3600)
-        - startTimeOfDaySeconds: 72000  # 20:00:00 (20 * 3600)
-          endTimeOfDaySeconds: 79200    # 22:00:00 (22 * 3600)
-        # Leave empty or set both values to 0 for 24-hour monitoring
+         - startTimeOfDaySeconds: 32400  # 09:00:00 (9 * 3600)
+           endTimeOfDaySeconds: 61200    # 17:00:00 (17 * 3600)
+         - startTimeOfDaySeconds: 72000  # 20:00:00 (20 * 3600)
+           endTimeOfDaySeconds: 79200    # 22:00:00 (22 * 3600)
+             # Leave empty or set both values to 0 for 24-hour monitoring
+             #- startTimeOfDaySeconds: 0
+             #endTimeOfDaySeconds: 0
       requirements:
         min_reaction_time_ms: 500  # Minimum reaction time to motion events
       notes:
         - "Front-facing PIR motion detector."
-        - "Supports autonomous operation during deep sleep."
+        - "Does not support autonomous operation during deep sleep."
         - "Active windows can be configured via IMotionSensorController.setActiveWindows()."

@@ -87,7 +87,7 @@ The Motion Sensor service supports the following command line flags:
 - `--hfp <path>`: Optional HFP YAML path.
   Default: `vcomponent_configurations/hfp-sensor.yaml`
 - `--port <port>`: Optional UT ControlPlane port to listen on.
-  Default: `8081`
+  Default: `8084`
 
 Example:
 
