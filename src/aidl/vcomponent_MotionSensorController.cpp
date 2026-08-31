@@ -124,6 +124,7 @@ android::binder::Status MotionSensorController::start(const StartConfig& config)
     else
     {
         m_parent->changeStateLocked(lock, State::STARTED);
+        m_parent->updateActiveWindowLocked(lock);
         m_parent->startNoMotionTimerLocked();
 
         if (config.activeStopSeconds > 0)
@@ -154,7 +155,7 @@ android::binder::Status MotionSensorController::stop()
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
-    if (m_parent->m_state != State::STARTING && m_parent->m_state != State::STARTED)
+    if (m_parent->m_state != State::STARTED)
     {
         LOGF_WARN(
             "%s: stop rejected because sensor state=%d",
@@ -164,6 +165,7 @@ android::binder::Status MotionSensorController::stop()
     }
 
     m_parent->invalidateLifecycleTimersLocked();
+    m_parent->cancelActiveWindowLocked();
     m_parent->changeStateLocked(lock, State::STOPPING);
     m_parent->changeStateLocked(lock, State::STOPPED);
 
@@ -294,7 +296,8 @@ android::binder::Status MotionSensorController::setSensitivity(int32_t sensitivi
             sensitivity,
             m_parent->m_capabilities.minSensitivity,
             m_parent->m_capabilities.maxSensitivity);
-        return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_ARGUMENT);
+        return android::binder::Status::fromExceptionCode(
+            android::binder::Status::EX_ILLEGAL_ARGUMENT);
     }
 
     m_parent->m_sensitivity = sensitivity;
@@ -399,7 +402,7 @@ android::binder::Status MotionSensorController::setActiveWindows(
         }
     }
 
-    std::lock_guard<std::mutex> lock(m_parent->m_mutex);
+    std::unique_lock<std::mutex> lock(m_parent->m_mutex);
     if (m_parent->m_controller.get() != this || m_parent->m_state != State::STOPPED)
     {
         LOGF_WARN(
@@ -453,7 +456,7 @@ android::binder::Status MotionSensorController::clearActiveWindows(bool* _aidl_r
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
-    std::lock_guard<std::mutex> lock(m_parent->m_mutex);
+    std::unique_lock<std::mutex> lock(m_parent->m_mutex);
     if (m_parent->m_controller.get() != this || m_parent->m_state != State::STOPPED)
     {
         LOGF_WARN(

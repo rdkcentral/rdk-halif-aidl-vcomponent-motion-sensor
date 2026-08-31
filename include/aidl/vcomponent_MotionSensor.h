@@ -199,6 +199,10 @@ private:
     void binderDied(const ::android::wp<::android::IBinder>& who) override;
     bool controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const;
     bool isWithinActiveWindowLocked(int32_t timeOfDaySeconds) const;
+    void updateActiveWindowLocked(std::unique_lock<std::mutex>& lock);
+    void scheduleActiveWindowLocked();
+    void cancelActiveWindowLocked();
+    void notifyActiveWindowLocked(std::unique_lock<std::mutex>& lock, bool entered);
     void startLifecycleTimerLocked(
         uint64_t lifecycleGeneration,
         int32_t activationDelaySeconds,
@@ -216,6 +220,9 @@ private:
     std::condition_variable m_noMotionTimerCondition;
     std::thread m_noMotionTimerThread;
     bool m_noMotionTimerCancelled{false};
+    std::condition_variable m_activeWindowSchedulerCondition;
+    std::thread m_activeWindowSchedulerThread;
+    bool m_activeWindowSchedulerCancelled{false};
 
     IMotionSensor::Id m_id{};
     Capabilities m_capabilities{};
@@ -225,9 +232,12 @@ private:
     bool m_autonomousDuringDeepSleepEnabled{false};
 
     StartConfig m_startConfig{};
-    // Restore HFP defaults for each controller session.
+    // Defaults are applied at sensor construction; configured windows persist
+    // across controller sessions for the running service lifetime.
     std::vector<TimeWindow> m_defaultActiveWindows{};
     std::vector<TimeWindow> m_activeWindows{};
+    bool m_isWithinActiveWindow{true};
+    uint64_t m_activeWindowSchedulerGeneration{0};
     std::optional<LastEventInfo> m_lastEventInfo{};
     uint64_t m_lifecycleGeneration{0};
     uint64_t m_noMotionTimerGeneration{0};
