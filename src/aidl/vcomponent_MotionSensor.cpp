@@ -783,9 +783,11 @@ void MotionSensor::scheduleActiveWindowLocked()
     int32_t secondsUntilBoundary = secondsPerDay;
     for (const TimeWindow& window : m_activeWindows)
     {
+        // Active windows include their end second, so the exit transition
+        // occurs at the following second and wraps correctly at midnight.
         const int32_t boundaries[] = {
             window.startTimeOfDaySeconds,
-            window.endTimeOfDaySeconds,
+            (window.endTimeOfDaySeconds + 1) % secondsPerDay,
         };
         for (const int32_t boundary : boundaries)
         {

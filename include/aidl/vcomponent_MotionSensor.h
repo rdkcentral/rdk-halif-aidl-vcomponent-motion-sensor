@@ -232,8 +232,7 @@ private:
     bool m_autonomousDuringDeepSleepEnabled{false};
 
     StartConfig m_startConfig{};
-    // Defaults are applied at sensor construction; configured windows persist
-    // across controller sessions for the running service lifetime.
+    // Defaults are applied at sensor construction
     std::vector<TimeWindow> m_defaultActiveWindows{};
     std::vector<TimeWindow> m_activeWindows{};
     bool m_isWithinActiveWindow{true};
