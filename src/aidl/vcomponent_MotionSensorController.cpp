@@ -117,6 +117,7 @@ android::binder::Status MotionSensorController::start(const StartConfig& config)
             logPrefix,
             config.activeStartSeconds);
         m_parent->startLifecycleTimerLocked(
+            lock,
             lifecycleGeneration,
             config.activeStartSeconds,
             config.activeStopSeconds);
@@ -125,11 +126,12 @@ android::binder::Status MotionSensorController::start(const StartConfig& config)
     {
         m_parent->changeStateLocked(lock, State::STARTED);
         m_parent->updateActiveWindowLocked(lock);
-        m_parent->startNoMotionTimerLocked();
+        m_parent->startNoMotionTimerLocked(lock);
 
         if (config.activeStopSeconds > 0)
         {
             m_parent->startLifecycleTimerLocked(
+                lock,
                 lifecycleGeneration,
                 0,
                 config.activeStopSeconds);
@@ -164,8 +166,8 @@ android::binder::Status MotionSensorController::stop()
         return android::binder::Status::fromExceptionCode(android::binder::Status::EX_ILLEGAL_STATE);
     }
 
-    m_parent->invalidateLifecycleTimersLocked();
-    m_parent->cancelActiveWindowLocked();
+    m_parent->invalidateLifecycleTimersLocked(lock);
+    m_parent->cancelActiveWindowLocked(lock);
     m_parent->changeStateLocked(lock, State::STOPPING);
     m_parent->changeStateLocked(lock, State::STOPPED);
 

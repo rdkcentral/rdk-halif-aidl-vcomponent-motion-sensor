@@ -200,18 +200,19 @@ private:
     bool controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const;
     bool isWithinActiveWindowLocked(int32_t timeOfDaySeconds) const;
     void updateActiveWindowLocked(std::unique_lock<std::mutex>& lock);
-    void scheduleActiveWindowLocked();
-    void cancelActiveWindowLocked();
+    void scheduleActiveWindowLocked(std::unique_lock<std::mutex>& lock);
+    void cancelActiveWindowLocked(std::unique_lock<std::mutex>& lock);
     void notifyActiveWindowLocked(std::unique_lock<std::mutex>& lock, bool entered);
     void startLifecycleTimerLocked(
+        std::unique_lock<std::mutex>& lock,
         uint64_t lifecycleGeneration,
         int32_t activationDelaySeconds,
         int32_t activeStopSeconds);
-    void cancelLifecycleTimerLocked();
-    void startNoMotionTimerLocked();
-    void cancelNoMotionTimerLocked();
-    void invalidateLifecycleTimersLocked();
-    void releaseControllerLocked();
+    void cancelLifecycleTimerLocked(std::unique_lock<std::mutex>& lock);
+    void startNoMotionTimerLocked(std::unique_lock<std::mutex>& lock);
+    void cancelNoMotionTimerLocked(std::unique_lock<std::mutex>& lock);
+    void invalidateLifecycleTimersLocked(std::unique_lock<std::mutex>& lock);
+    void releaseControllerLocked(std::unique_lock<std::mutex>& lock);
 
     mutable std::mutex m_mutex;
     std::condition_variable m_lifecycleTimerCondition;

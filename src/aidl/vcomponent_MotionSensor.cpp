@@ -249,7 +249,7 @@ android::binder::Status MotionSensor::close(
         changeStateLocked(lock, State::STOPPED);
     }
 
-    releaseControllerLocked();
+    releaseControllerLocked(lock);
     *_aidl_return = true;
 
     LOGF_INFO("%s: closed sensor id=%d", logPrefix, m_id.value);
@@ -374,7 +374,9 @@ bool MotionSensor::injectMotionEvent()
 
     std::vector<android::sp<IMotionSensorEventListener>> listeners;
     {
-        std::lock_guard<std::mutex> lock(m_mutex);
+        // The timer helper may release the mutex while joining a previous
+        // timer thread, so this scope needs a lock type it can unlock/relock.
+        std::unique_lock<std::mutex> lock(m_mutex);
         if (m_state != State::STARTED)
         {
             LOGF_WARN(
@@ -400,7 +402,7 @@ bool MotionSensor::injectMotionEvent()
         {
             // Physical motion restarts the contiguous inactivity period. The
             // AIDL listener receives only the configured active event mode.
-            startNoMotionTimerLocked();
+            startNoMotionTimerLocked(lock);
             LOGF_INFO(
                 "%s: detected motion and restarted no-motion timer for sensor id=%d "
                 "noMotionSeconds=%d",
@@ -491,11 +493,12 @@ void MotionSensor::changeStateLocked(std::unique_lock<std::mutex>& lock, State n
 }
 
 void MotionSensor::startLifecycleTimerLocked(
+    std::unique_lock<std::mutex>& lock,
     uint64_t lifecycleGeneration,
     int32_t activationDelaySeconds,
     int32_t activeStopSeconds)
 {
-    cancelLifecycleTimerLocked();
+    cancelLifecycleTimerLocked(lock);
     m_lifecycleTimerCancelled = false;
     m_lifecycleTimerThread = std::thread(
         [this, lifecycleGeneration, activationDelaySeconds, activeStopSeconds]() {
@@ -525,7 +528,7 @@ void MotionSensor::startLifecycleTimerLocked(
                     m_id.value);
                 changeStateLocked(lock, State::STARTED);
                 updateActiveWindowLocked(lock);
-                startNoMotionTimerLocked();
+                startNoMotionTimerLocked(lock);
             }
 
             if (activeStopSeconds <= 0 || waitForCancellation(activeStopSeconds))
@@ -544,14 +547,14 @@ void MotionSensor::startLifecycleTimerLocked(
                 "%s: automatically stopping sensor id=%d after activeStopSeconds",
                 logPrefix,
                 m_id.value);
-            cancelNoMotionTimerLocked();
-            cancelActiveWindowLocked();
+            cancelNoMotionTimerLocked(lock);
+            cancelActiveWindowLocked(lock);
             changeStateLocked(lock, State::STOPPING);
             changeStateLocked(lock, State::STOPPED);
         });
 }
 
-void MotionSensor::cancelLifecycleTimerLocked()
+void MotionSensor::cancelLifecycleTimerLocked(std::unique_lock<std::mutex>& lock)
 {
     m_lifecycleTimerCancelled = true;
     m_lifecycleTimerCondition.notify_all();
@@ -568,14 +571,14 @@ void MotionSensor::cancelLifecycleTimerLocked()
         return;
     }
 
-    m_mutex.unlock();
+    lock.unlock();
     lifecycleTimer.join();
-    m_mutex.lock();
+    lock.lock();
 }
 
-void MotionSensor::startNoMotionTimerLocked()
+void MotionSensor::startNoMotionTimerLocked(std::unique_lock<std::mutex>& lock)
 {
-    cancelNoMotionTimerLocked();
+    cancelNoMotionTimerLocked(lock);
 
     if (m_state != State::STARTED ||
         m_startConfig.operationalMode != OperationalMode::NO_MOTION ||
@@ -673,7 +676,7 @@ void MotionSensor::startNoMotionTimerLocked()
     });
 }
 
-void MotionSensor::cancelNoMotionTimerLocked()
+void MotionSensor::cancelNoMotionTimerLocked(std::unique_lock<std::mutex>& lock)
 {
     m_noMotionTimerCancelled = true;
     m_noMotionTimerCondition.notify_all();
@@ -690,17 +693,17 @@ void MotionSensor::cancelNoMotionTimerLocked()
         return;
     }
 
-    m_mutex.unlock();
+    lock.unlock();
     noMotionTimer.join();
-    m_mutex.lock();
+    lock.lock();
 }
 
-void MotionSensor::invalidateLifecycleTimersLocked()
+void MotionSensor::invalidateLifecycleTimersLocked(std::unique_lock<std::mutex>& lock)
 {
     ++m_lifecycleGeneration;
-    cancelLifecycleTimerLocked();
+    cancelLifecycleTimerLocked(lock);
     ++m_noMotionTimerGeneration;
-    cancelNoMotionTimerLocked();
+    cancelNoMotionTimerLocked(lock);
 }
 
 bool MotionSensor::controllerMatchesLocked(const android::sp<IMotionSensorController>& controller) const
@@ -761,12 +764,12 @@ void MotionSensor::updateActiveWindowLocked(std::unique_lock<std::mutex>& lock)
         notifyActiveWindowLocked(lock, active);
     }
 
-    scheduleActiveWindowLocked();
+    scheduleActiveWindowLocked(lock);
 }
 
-void MotionSensor::scheduleActiveWindowLocked()
+void MotionSensor::scheduleActiveWindowLocked(std::unique_lock<std::mutex>& lock)
 {
-    cancelActiveWindowLocked();
+    cancelActiveWindowLocked(lock);
 
     if (m_state != State::STARTED || m_activeWindows.empty())
     {
@@ -823,7 +826,7 @@ void MotionSensor::scheduleActiveWindowLocked()
         });
 }
 
-void MotionSensor::cancelActiveWindowLocked()
+void MotionSensor::cancelActiveWindowLocked(std::unique_lock<std::mutex>& lock)
 {
     m_activeWindowSchedulerCancelled = true;
     m_activeWindowSchedulerCondition.notify_all();
@@ -840,9 +843,9 @@ void MotionSensor::cancelActiveWindowLocked()
         return;
     }
 
-    m_mutex.unlock();
+    lock.unlock();
     scheduler.join();
-    m_mutex.lock();
+    lock.lock();
 }
 
 void MotionSensor::notifyActiveWindowLocked(
@@ -883,10 +886,10 @@ void MotionSensor::notifyActiveWindowLocked(
     lock.lock();
 }
 
-void MotionSensor::releaseControllerLocked()
+void MotionSensor::releaseControllerLocked(std::unique_lock<std::mutex>& lock)
 {
-    invalidateLifecycleTimersLocked();
-    cancelActiveWindowLocked();
+    invalidateLifecycleTimersLocked(lock);
+    cancelActiveWindowLocked(lock);
 
     if (m_ownerBinder != nullptr)
     {
@@ -922,8 +925,8 @@ void MotionSensor::binderDied(const ::android::wp<::android::IBinder>& who)
         logPrefix,
         m_id.value);
 
-    invalidateLifecycleTimersLocked();
-    cancelActiveWindowLocked();
+    invalidateLifecycleTimersLocked(lock);
+    cancelActiveWindowLocked(lock);
 
     if (m_state == State::STARTING || m_state == State::STARTED)
     {
@@ -935,7 +938,7 @@ void MotionSensor::binderDied(const ::android::wp<::android::IBinder>& who)
         changeStateLocked(lock, State::STOPPED);
     }
 
-    releaseControllerLocked();
+    releaseControllerLocked(lock);
 }
 
 } // namespace com::rdk::hal::sensor::motion
