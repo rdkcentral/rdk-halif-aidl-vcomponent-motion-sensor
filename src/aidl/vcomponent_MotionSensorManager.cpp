@@ -24,8 +24,6 @@
 
 #include <com/rdk/hal/sensor/motion/OperationalMode.h>
 
-#include <utils/String16.h>
-
 namespace com::rdk::hal::sensor::motion
 {
 
@@ -85,7 +83,7 @@ std::vector<TimeWindow> toTimeWindows(
 Capabilities toCapabilities(const vcomponent::utility::MotionSensorConfig& sensor)
 {
     Capabilities capabilities;
-    capabilities.sensorName = android::String16(sensor.sensorName.c_str());
+    capabilities.sensorName = sensor.sensorName;
     capabilities.minSensitivity = sensor.minSensitivity;
     capabilities.maxSensitivity = sensor.maxSensitivity;
     capabilities.supportsDeepSleepAutonomy = sensor.supportsDeepSleepAutonomy;
